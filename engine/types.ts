@@ -4,6 +4,8 @@ export type Suit = "hearts" | "diamonds" | "clubs" | "spades";
 /** Card rank including Joker. Value mapping is defined in cards.ts. */
 export type Rank = "A" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" | "10" | "J" | "Q" | "K" | "JOKER";
 
+export type PowerRanks = "10" | "J" | "Q" | "K" | "JOKER";
+
 /** A single card in the deck or a player's hand. */
 export interface Card {
   /** Unique identifier (e.g. "card-0"), not a display name. */
@@ -75,21 +77,20 @@ export type EventData = {
 }[ProposedEventType];
 
 /** An event that has been validated and appended to the event log. */
-export type CommittedEvent<T extends ProposedEventType = ProposedEventType> =
-  T extends ProposedEventType
-    ? {
-        id: string;
-        /** Monotonically increasing index in the event log. */
-        sequence: number;
-        /** Unix timestamp (ms) when the event was committed. */
-        timestamp: number;
-        /** The player who proposed this event. */
-        playerId: string;
-        type: T;
-        /** Arbitrary data specific to the event type. */
-        payload: EventPayloadMap[T];
-      }
-    : never;
+export type CommittedEvent<T extends ProposedEventType = ProposedEventType> = T extends ProposedEventType
+  ? {
+      id: string;
+      /** Monotonically increasing index in the event log. */
+      sequence: number;
+      /** Unix timestamp (ms) when the event was committed. */
+      timestamp: number;
+      /** The player who proposed this event. */
+      playerId: string;
+      type: T;
+      /** Arbitrary data specific to the event type. */
+      payload: EventPayloadMap[T];
+    }
+  : never;
 
 /** A King or Joker card placed face-up as a lock marker. */
 export interface LockMarker {
@@ -109,20 +110,33 @@ export interface EngineConfig {
   seed?: number;
 }
 
+export type PowerRank = "10" | "J" | "Q" | "K";
+
+export interface PowerActionMap {
+  "10": { power: "peek"; target: "own" } | { power: "peek"; target: "opponent"; opponentId: string };
+  J: { power: "shuffle"; targetPlayerId: string };
+  Q: {
+    power: "swap";
+    sourcePlayerId: string;
+    sourceCardIndex: number;
+    targetPlayerId: string;
+    targetCardIndex: number;
+  };
+  K: { power: "lock"; targetPlayerId: string; cardIndex: number };
+}
+
+export type BasePowerAction = PowerActionMap[keyof PowerActionMap];
+
+export type JokerPowerAction = {
+  [R in PowerRank]: {
+    power: "joker";
+    mimicRank: R;
+    action: PowerActionMap[R];
+  };
+}[PowerRank];
+
 /** Discriminated union for USE_POWER payloads. */
-export type PowerAction =
-  | { power: "peek"; target: "own" }
-  | { power: "peek"; target: "opponent"; opponentId: string }
-  | { power: "shuffle"; targetPlayerId: string }
-  | {
-      power: "swap";
-      sourcePlayerId: string;
-      sourceCardIndex: number;
-      targetPlayerId: string;
-      targetCardIndex: number;
-    }
-  | { power: "lock"; targetPlayerId: string; cardIndex: number }
-  | { power: "joker"; mimicRank: Rank; action: PowerAction };
+export type PowerAction = BasePowerAction | JokerPowerAction;
 
 /** Result of a Peek power action — shows which cards were viewed. */
 export interface PeekResult {

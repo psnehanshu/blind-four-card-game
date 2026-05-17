@@ -580,3 +580,139 @@ describe("GameEngine — edge cases", () => {
     assert.ok(r.error);
   });
 });
+
+// ───────────────────────────────  Joker Power  ───────────────────────────────
+
+describe("GameEngine — Joker power", () => {
+  function setupJoker(): { engine: GameEngine; playerId: string } {
+    // Seed 2 for 3 players gives Alice a Joker on her first draw
+    const engine = new GameEngine(makeConfig({ seed: 2 }));
+    engine.createGame();
+    const playerId = turnOrder(engine)[0];
+
+    // Alice draws Joker and discards it
+    engine.processEvent(playerId, "DRAW_CARD", { source: "deck" });
+    const discR = engine.processEvent(playerId, "DISCARD_DRAWN", undefined);
+
+    if (!discR.validEvents.includes("USE_POWER")) {
+      throw new Error("Failed to get Joker power in setup");
+    }
+
+    return { engine, playerId };
+  }
+
+  it("Mimic Peek (own) — works correctly", () => {
+    const { engine, playerId } = setupJoker();
+
+    const result = engine.processEvent(playerId, "USE_POWER", {
+      power: "joker",
+      mimicRank: "10",
+      action: { power: "peek", target: "own" },
+    });
+
+    assert.equal(result.error, undefined);
+    assert.ok(result.peekResult);
+    assert.equal(result.peekResult.playerId, playerId);
+    assert.equal(result.peekResult.cards.length, HAND_SIZE);
+  });
+
+  it("Mimic Swap — works correctly", () => {
+    const { engine, playerId } = setupJoker();
+    const players = turnOrder(engine);
+    const targetId = players[1];
+
+    const cardA = engine.getState().players[0].hand[0].card.id;
+    const cardB = engine.getState().players[1].hand[0].card.id;
+
+    const result = engine.processEvent(playerId, "USE_POWER", {
+      power: "joker",
+      mimicRank: "Q",
+      action: {
+        power: "swap",
+        sourcePlayerId: playerId,
+        sourceCardIndex: 0,
+        targetPlayerId: targetId,
+        targetCardIndex: 0,
+      },
+    });
+
+    assert.equal(result.error, undefined);
+    assert.equal(engine.getState().players[0].hand[0].card.id, cardB);
+    assert.equal(engine.getState().players[1].hand[0].card.id, cardA);
+  });
+
+  it("Mimic Shuffle — works correctly", () => {
+    const { engine, playerId } = setupJoker();
+    const players = turnOrder(engine);
+    const targetId = players[1];
+
+    const originalHand = engine
+      .getState()
+      .players[1].hand.map((pc) => pc.card.id)
+      .sort();
+
+    const result = engine.processEvent(playerId, "USE_POWER", {
+      power: "joker",
+      mimicRank: "J",
+      action: {
+        power: "shuffle",
+        targetPlayerId: targetId,
+      },
+    });
+
+    assert.equal(result.error, undefined);
+    const newHand = engine
+      .getState()
+      .players[1].hand.map((pc) => pc.card.id)
+      .sort();
+    assert.deepEqual(newHand, originalHand);
+  });
+
+  it("Mimic Lock — works correctly", () => {
+    const { engine, playerId } = setupJoker();
+
+    const result = engine.processEvent(playerId, "USE_POWER", {
+      power: "joker",
+      mimicRank: "K",
+      action: {
+        power: "lock",
+        targetPlayerId: playerId,
+        cardIndex: 0,
+      },
+    });
+
+    assert.equal(result.error, undefined);
+    assert.ok(engine.getState().players[0].hand[0].locked);
+    const visibleState = engine.getVisibleState(playerId);
+    assert.equal(visibleState.lockMarkers.length, 1);
+    assert.equal(visibleState.lockMarkers[0].markerCard.rank, "JOKER");
+  });
+
+  it("rejects non-joker action when power is Joker", () => {
+    const { engine, playerId } = setupJoker();
+
+    const invalidAction: PowerAction = {
+      power: "peek",
+      target: "own",
+    };
+
+    const result = engine.processEvent(playerId, "USE_POWER", invalidAction);
+
+    assert.ok(result.error);
+    assert.match(result.error, /Expected power action "joker"/);
+  });
+
+  it("rejects joker action without inner action", () => {
+    const { engine, playerId } = setupJoker();
+
+    // @ts-expect-error - missing inner action
+    const invalidJokerAction: PowerAction = {
+      power: "joker",
+      mimicRank: "10",
+    };
+
+    const result = engine.processEvent(playerId, "USE_POWER", invalidJokerAction);
+    assert.ok(result.error);
+    assert.match(result.error, /missing inner action/);
+  });
+});

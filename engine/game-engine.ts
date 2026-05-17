@@ -8,6 +8,7 @@ import type {
   CommittedEvent,
   EngineConfig,
   PowerAction,
+  BasePowerAction,
   EngineResult,
   LockMarker,
   PeekResult,
@@ -83,11 +84,7 @@ export class GameEngine {
   }
 
   /** Process a player action. Validates → commits → reduces → returns result. */
-  processEvent<T extends ProposedEventType>(
-    playerId: string,
-    eventType: T,
-    payload: EventPayloadMap[T],
-  ): EngineResult {
+  processEvent<T extends ProposedEventType>(playerId: string, eventType: T, payload: EventPayloadMap[T]): EngineResult {
     const error = this.validateEvent(playerId, eventType, payload);
     if (error) {
       return { ...this.buildResult([]), error };
@@ -283,6 +280,9 @@ export class GameEngine {
       if (action.power !== expected) {
         return `Expected power action "${expected}" but got "${action.power}"`;
       }
+      if (action.power === "joker" && !action.action) {
+        return "Invalid joker action: missing inner action";
+      }
     } else if (eventType === "CALL_SHOWDOWN") {
       if (this.phase !== "showdown_eligible") return "Cannot call showdown now";
       if (this.game.state === "showdown") return "Showdown already in progress";
@@ -389,9 +389,8 @@ export class GameEngine {
     if (!action || !action.power) throw new Error("Invalid power action");
 
     // Determine effective power (handle joker mimic)
-    let effectiveAction: PowerAction;
+    let effectiveAction: BasePowerAction;
     if (action.power === "joker") {
-      if (!action.action) throw new Error("Invalid joker action");
       effectiveAction = action.action;
     } else {
       effectiveAction = action;
@@ -422,7 +421,7 @@ export class GameEngine {
 
   // ────────────────────── Private: Power Resolution ────────────────────────
 
-  private applyPeek(action: PowerAction): void {
+  private applyPeek(action: BasePowerAction): void {
     if (action.power !== "peek") return;
 
     if (action.target === "own") {
@@ -447,7 +446,7 @@ export class GameEngine {
     }
   }
 
-  private applyShuffle(action: PowerAction): void {
+  private applyShuffle(action: BasePowerAction): void {
     if (action.power !== "shuffle") return;
     const targetPlayer = this.game.players.find((p) => p.id === action.targetPlayerId);
     if (!targetPlayer) throw new Error("Invalid target player");
