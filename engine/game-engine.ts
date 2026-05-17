@@ -119,7 +119,8 @@ export class GameEngine {
     const valid: ProposedEventType[] = [];
 
     // Must be this player's turn
-    if (this.game.players[this.game.currentTurn].id !== playerId) return valid;
+    const currentPlayer = this.game.players[this.game.currentTurn];
+    if (!currentPlayer || currentPlayer.id !== playerId) return valid;
 
     if (this.game.state === "finished") return valid;
 
@@ -161,7 +162,7 @@ export class GameEngine {
         name: p.name,
         lockedCards,
         handSize: p.hand.length,
-        isCurrentTurn: this.game.players[this.game.currentTurn].id === p.id,
+        isCurrentTurn: this.game.players[this.game.currentTurn]?.id === p.id,
       });
     }
 
@@ -267,7 +268,7 @@ export class GameEngine {
     if (this.game.state === "finished") return "Game is already finished";
 
     const currentPlayer = this.game.players[this.game.currentTurn];
-    if (currentPlayer.id !== playerId) return "Not your turn";
+    if (!currentPlayer || currentPlayer.id !== playerId) return "Not your turn";
 
     // Phase-based validation
     if (this.isDrawPayload(eventType, payload)) {
@@ -376,7 +377,9 @@ export class GameEngine {
     }
 
     const player = this.game.players[this.game.currentTurn];
+    if (!player) throw new Error("Player not found");
     const target = player.hand[handIndex];
+    if (!target) throw new Error("Card not found in hand");
     if (target.locked) throw new Error("Cannot replace a locked card");
 
     // Put drawn card in hand, old card goes to discard
@@ -401,7 +404,9 @@ export class GameEngine {
 
   /** Initiates the showdown phase. */
   private applyCallShowdown(_event: CommittedEvent<"CALL_SHOWDOWN">): void {
-    const callerId = this.game.players[this.game.currentTurn].id;
+    const currentPlayer = this.game.players[this.game.currentTurn];
+    if (!currentPlayer) throw new Error("Current player not found");
+    const callerId = currentPlayer.id;
     this.game.state = "showdown";
     this.game.callerId = callerId;
     this.playersCompletedFinalTurn.add(callerId);
@@ -453,6 +458,7 @@ export class GameEngine {
 
     if (action.target === "own") {
       const player = this.game.players[this.game.currentTurn];
+      if (!player) throw new Error("Current player not found");
       this.lastPeekResult = {
         playerId: player.id,
         cards: player.hand.map((pc, i) => ({ index: i, card: pc.card })),
@@ -466,9 +472,11 @@ export class GameEngine {
       // but only 1 card's data. Actually, let's return the first unlocked card.
       const unlockedIdx = opponent.hand.findIndex((pc) => !pc.locked);
       if (unlockedIdx === -1) throw new Error("No unlocked cards to peek at");
+      const playerCard = opponent.hand[unlockedIdx];
+      if (!playerCard) throw new Error("Card not found");
       this.lastPeekResult = {
         playerId: opponent.id,
-        cards: [{ index: unlockedIdx, card: opponent.hand[unlockedIdx].card }],
+        cards: [{ index: unlockedIdx, card: playerCard.card }],
       };
     }
   }
@@ -485,11 +493,18 @@ export class GameEngine {
       .filter((x) => !x.pc.locked)
       .map((x) => x.i);
 
-    const unlockedCards = unlockedIndices.map((i) => targetPlayer.hand[i]);
+    const unlockedCards = unlockedIndices.map((i) => {
+      const card = targetPlayer.hand[i];
+      if (!card) throw new Error("Card not found");
+      return card;
+    });
     const shuffled = this.rng.shuffle(unlockedCards);
 
     for (let k = 0; k < unlockedIndices.length; k++) {
-      targetPlayer.hand[unlockedIndices[k]] = shuffled[k];
+      const index = unlockedIndices[k];
+      const card = shuffled[k];
+      if (index === undefined || !card) throw new Error("Invalid shuffle state");
+      targetPlayer.hand[index] = card;
     }
   }
 
@@ -500,11 +515,16 @@ export class GameEngine {
     const sourcePlayer = this.game.players.find((p) => p.id === sourcePlayerId);
     const targetPlayer = this.game.players.find((p) => p.id === targetPlayerId);
     if (!sourcePlayer || !targetPlayer) throw new Error("Invalid player in swap");
-    if (sourcePlayer.hand[sourceCardIndex].locked) throw new Error("Cannot swap locked card");
-    if (targetPlayer.hand[targetCardIndex].locked) throw new Error("Cannot swap locked card");
 
-    const temp = sourcePlayer.hand[sourceCardIndex];
-    sourcePlayer.hand[sourceCardIndex] = targetPlayer.hand[targetCardIndex];
+    const sourcePC = sourcePlayer.hand[sourceCardIndex];
+    const targetPC = targetPlayer.hand[targetCardIndex];
+
+    if (!sourcePC || !targetPC) throw new Error("Card not found for swap");
+    if (sourcePC.locked) throw new Error("Cannot swap locked card");
+    if (targetPC.locked) throw new Error("Cannot swap locked card");
+
+    const temp = sourcePC;
+    sourcePlayer.hand[sourceCardIndex] = targetPC;
     targetPlayer.hand[targetCardIndex] = temp;
   }
 
@@ -514,11 +534,13 @@ export class GameEngine {
 
     const targetPlayer = this.game.players.find((p) => p.id === targetPlayerId);
     if (!targetPlayer) throw new Error("Invalid target player");
-    if (targetPlayer.hand[cardIndex].locked) throw new Error("Card is already locked");
+    const playerCard = targetPlayer.hand[cardIndex];
+    if (!playerCard) throw new Error("Card not found");
+    if (playerCard.locked) throw new Error("Card is already locked");
 
     // Mark as locked and add the King/Joker as a lock marker
     targetPlayer.hand[cardIndex] = {
-      ...targetPlayer.hand[cardIndex],
+      card: playerCard.card,
       locked: true,
     };
 
@@ -569,7 +591,9 @@ export class GameEngine {
     this.pendingPowerRank = null;
     this.totalTurnsTaken++;
 
-    const currentPlayerId = this.game.players[this.game.currentTurn].id;
+    const currentPlayer = this.game.players[this.game.currentTurn];
+    if (!currentPlayer) throw new Error("Current player not found");
+    const currentPlayerId = currentPlayer.id;
     this.playerTurnCount.set(currentPlayerId, (this.playerTurnCount.get(currentPlayerId) ?? 0) + 1);
 
     const isShowdown = this.game.state === "showdown";
@@ -584,7 +608,9 @@ export class GameEngine {
     // Find the next player
     for (let i = 1; i <= numPlayers; i++) {
       const nextIdx = (this.game.currentTurn + i) % numPlayers;
-      const nextPlayerId = this.game.players[nextIdx].id;
+      const nextPlayer = this.game.players[nextIdx];
+      if (!nextPlayer) continue;
+      const nextPlayerId = nextPlayer.id;
 
       if (isShowdown) {
         // Skip the caller and players who already did their final turn
@@ -644,7 +670,9 @@ export class GameEngine {
 
   /** Checks if the game is eligible for a showdown call. */
   private isShowdownEligible(): boolean {
-    const currentPlayerId = this.game.players[this.game.currentTurn].id;
+    const currentPlayer = this.game.players[this.game.currentTurn];
+    if (!currentPlayer) return false;
+    const currentPlayerId = currentPlayer.id;
     // Every player (including the current caller) must have completed at least MIN_TURNS_BEFORE_SHOWDOWN
     for (const p of this.game.players) {
       if ((this.playerTurnCount.get(p.id) ?? 0) < MIN_TURNS_BEFORE_SHOWDOWN) {
@@ -659,7 +687,9 @@ export class GameEngine {
 
   /** Packages the current engine state into a result format for the client. */
   private buildResult(events: CommittedEvent[]): EngineResult {
-    const currentPlayerId = this.game.players[this.game.currentTurn].id;
+    const currentPlayer = this.game.players[this.game.currentTurn];
+    if (!currentPlayer) throw new Error("Current player not found");
+    const currentPlayerId = currentPlayer.id;
     const validEvents = this.getValidEvents(currentPlayerId);
 
     const result: EngineResult = {

@@ -24,7 +24,12 @@ export class SeededRNG {
     const copy = [...array];
     for (let i = copy.length - 1; i > 0; i--) {
       const j = this.nextInt(0, i);
-      [copy[i], copy[j]] = [copy[j], copy[i]];
+      const valI = copy[i];
+      const valJ = copy[j];
+      if (valI !== undefined && valJ !== undefined) {
+        copy[i] = valJ;
+        copy[j] = valI;
+      }
     }
     return copy;
   }
