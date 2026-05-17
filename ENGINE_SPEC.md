@@ -154,47 +154,39 @@ Tie against caller = caller loses, tied non-caller wins.
 # Data Model
 
 ```ts
-export type Suit = "hearts" | "diamonds" | "clubs" | "spades"
+export type Suit = "hearts" | "diamonds" | "clubs" | "spades";
 
-export type Rank =
-  | "A" | "2" | "3" | "4" | "5" | "6"
-  | "7" | "8" | "9" | "10"
-  | "J" | "Q" | "K" | "JOKER"
+export type Rank = "A" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" | "10" | "J" | "Q" | "K" | "JOKER";
 
 export interface Card {
-  id: string
-  suit?: Suit
-  rank: Rank
-  value: number
+  id: string;
+  suit?: Suit;
+  rank: Rank;
+  value: number;
 }
 
 export interface PlayerCard {
-  card: Card
-  locked: boolean
+  card: Card;
+  locked: boolean;
 }
 
 export interface Player {
-  id: string
-  name: string
-  hand: [PlayerCard, PlayerCard, PlayerCard, PlayerCard]
-  connected: boolean
+  id: string;
+  name: string;
+  hand: [PlayerCard, PlayerCard, PlayerCard, PlayerCard];
+  connected: boolean;
 }
 
-export type GameState =
-  | "waiting"
-  | "initial_reveal"
-  | "in_progress"
-  | "showdown"
-  | "finished"
+export type GameState = "waiting" | "initial_reveal" | "in_progress" | "showdown" | "finished";
 
 export interface Game {
-  id: string
-  players: Player[]
-  deck: Card[]
-  discardPile: Card[]
-  currentTurn: number
-  state: GameState
-  callerId?: string
+  id: string;
+  players: Player[];
+  deck: Card[];
+  discardPile: Card[];
+  currentTurn: number;
+  state: GameState;
+  callerId?: string;
 }
 ```
 
@@ -228,20 +220,15 @@ Broadcast State + Valid Events
 ## Event Model
 
 ```ts
-export type ProposedEventType =
-  | "DRAW_CARD"
-  | "REPLACE_CARD"
-  | "DISCARD_DRAWN"
-  | "CALL_SHOWDOWN"
-  | "USE_POWER"
+export type ProposedEventType = "DRAW_CARD" | "REPLACE_CARD" | "DISCARD_DRAWN" | "CALL_SHOWDOWN" | "USE_POWER";
 
 export interface CommittedEvent<T = unknown> {
-  id: string
-  sequence: number
-  timestamp: number
-  playerId: string
-  type: ProposedEventType
-  payload: T
+  id: string;
+  sequence: number;
+  timestamp: number;
+  playerId: string;
+  type: ProposedEventType;
+  payload: T;
 }
 ```
 
@@ -254,16 +241,16 @@ Initial State + Event Log = Current State
 Reducer:
 
 ```ts
-const nextState = reducer(currentState, committedEvent)
+const nextState = reducer(currentState, committedEvent);
 ```
 
 Engine response:
 
 ```ts
 interface EngineResult {
-  nextState: Game
-  events: CommittedEvent[]
-  validEvents: ProposedEventType[]
+  nextState: Game;
+  events: CommittedEvent[];
+  validEvents: ProposedEventType[];
 }
 ```
 
@@ -299,4 +286,3 @@ Excluded:
 - spectators
 - reconnect recovery
 - animations
-
