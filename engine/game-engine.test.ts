@@ -349,6 +349,43 @@ describe("GameEngine — powers", () => {
     assert.ok(c0.locked);
   });
 
+  it("Lock (K) — marker card is kept out of the discard pile", () => {
+    // seed 999 (3 players): top deck draw is K
+    const e = new GameEngine(makeConfig({ seed: 999 }));
+    e.createGame();
+    const players = turnOrder(e);
+    const pid = players[0];
+    assert.ok(pid);
+
+    e.processEvent(pid, "DRAW_CARD", { source: "deck" });
+    // After DISCARD_DRAWN the K briefly enters the discard pile.
+    const discR = e.processEvent(pid, "DISCARD_DRAWN", undefined);
+    assert.ok(discR.validEvents.includes("USE_POWER"));
+    const kAfterDiscard = e.getState().discardPile.at(-1);
+    assert.ok(kAfterDiscard);
+    assert.equal(kAfterDiscard.rank, "K");
+
+    const lockR = e.processEvent(pid, "USE_POWER", {
+      power: "lock",
+      targetPlayerId: pid,
+      cardIndex: 0,
+    });
+    assert.equal(lockR.error, undefined);
+
+    // After applyLock the K must move from discardPile to lockMarkers.
+    const state = e.getState();
+    assert.ok(
+      !state.discardPile.some((c) => c.id === kAfterDiscard.id),
+      "K marker card must not be in the discard pile after lock is applied",
+    );
+    const visible = e.getVisibleState(pid);
+    const marker = visible.lockMarkers.find((m) => m.markerCard.id === kAfterDiscard.id);
+    assert.ok(marker, "K marker card must appear in lockMarkers");
+    assert.equal(marker.markerCard.rank, "K");
+    assert.equal(marker.playerId, pid);
+    assert.equal(marker.cardIndex, 0);
+  });
+
   it("Swap (Q) — swaps cards between players", () => {
     // seed 9 (3 players) deterministically yields a Q as the first deck draw
     const e = new GameEngine(makeConfig({ seed: 9 }));
@@ -867,6 +904,11 @@ describe("GameEngine — Joker power", () => {
     const marker0 = visibleState.lockMarkers[0];
     assert.ok(marker0);
     assert.equal(marker0.markerCard.rank, "JOKER");
+    // The mimicking Joker must move out of the discard pile into lockMarkers.
+    assert.ok(
+      !engine.getState().discardPile.some((c) => c.id === marker0.markerCard.id),
+      "Joker mimic-K marker must not be in the discard pile after lock is applied",
+    );
   });
 
   it("rejects non-joker action when power is Joker", () => {
