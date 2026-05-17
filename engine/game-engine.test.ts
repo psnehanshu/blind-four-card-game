@@ -897,3 +897,151 @@ describe("GameEngine — Joker power", () => {
     assert.match(result.error, /missing inner action/);
   });
 });
+
+// ───────────────────────────────  Winners  ───────────────────────────────
+
+describe("GameEngine — winners", () => {
+  /** Plays one full turn for `pid`, resolving any power that triggers. */
+  function playTurn(engine: GameEngine, pid: string): void {
+    engine.processEvent(pid, "DRAW_CARD", { source: "deck" });
+    engine.processEvent(pid, "DISCARD_DRAWN", undefined);
+    if (engine.getValidEvents(pid).includes("USE_POWER")) {
+      const others = turnOrder(engine).filter((p) => p !== pid);
+      const attempts: PowerAction[] = [
+        { power: "peek", target: "own" },
+        { power: "shuffle", targetPlayerId: pid },
+        { power: "lock", targetPlayerId: pid, cardIndex: 0 },
+        { power: "joker", mimicRank: "10", action: { power: "peek", target: "own" } },
+      ];
+      const firstOther = others[0];
+      if (firstOther) {
+        attempts.push({
+          power: "swap",
+          sourcePlayerId: pid,
+          sourceCardIndex: 0,
+          targetPlayerId: firstOther,
+          targetCardIndex: 0,
+        });
+      }
+      for (const a of attempts) {
+        const r = engine.processEvent(pid, "USE_POWER", a);
+        if (!r.error) break;
+      }
+    }
+    engine.processEvent(pid, "END_TURN", undefined);
+  }
+
+  /** Plays the caller's showdown-calling turn (draw → discard → resolve power → CALL_SHOWDOWN). */
+  function callShowdown(engine: GameEngine, callerId: string): void {
+    engine.processEvent(callerId, "DRAW_CARD", { source: "deck" });
+    engine.processEvent(callerId, "DISCARD_DRAWN", undefined);
+    if (engine.getValidEvents(callerId).includes("USE_POWER")) {
+      const others = turnOrder(engine).filter((p) => p !== callerId);
+      const attempts: PowerAction[] = [
+        { power: "peek", target: "own" },
+        { power: "shuffle", targetPlayerId: callerId },
+        { power: "lock", targetPlayerId: callerId, cardIndex: 0 },
+        { power: "joker", mimicRank: "10", action: { power: "peek", target: "own" } },
+      ];
+      const firstOther = others[0];
+      if (firstOther) {
+        attempts.push({
+          power: "swap",
+          sourcePlayerId: callerId,
+          sourceCardIndex: 0,
+          targetPlayerId: firstOther,
+          targetCardIndex: 0,
+        });
+      }
+      for (const a of attempts) {
+        const r = engine.processEvent(callerId, "USE_POWER", a);
+        if (!r.error) break;
+      }
+    }
+    const callR = engine.processEvent(callerId, "CALL_SHOWDOWN", undefined);
+    assert.equal(callR.error, undefined);
+  }
+
+  /** Reaches finished state with player 0 as caller. */
+  function playToFinished(playerIds: string[], seed: number): GameEngine {
+    const e = new GameEngine(makeConfig({ playerIds, seed }));
+    e.createGame();
+    for (let i = 0; i < MIN_TURNS_BEFORE_SHOWDOWN; i++) {
+      for (const pid of playerIds) playTurn(e, pid);
+    }
+    const callerId = playerIds[0];
+    assert.ok(callerId);
+    callShowdown(e, callerId);
+    for (const pid of playerIds.slice(1)) playTurn(e, pid);
+    assert.equal(e.getState().state, "finished");
+    return e;
+  }
+
+  /** Overwrites a player's hand-card values to set up a known total. */
+  function setHandValues(engine: GameEngine, playerIdx: number, values: number[]): void {
+    const player = engine.getState().players[playerIdx];
+    assert.ok(player);
+    for (let i = 0; i < HAND_SIZE; i++) {
+      const pc = player.hand[i];
+      assert.ok(pc);
+      const v = values[i];
+      assert.ok(v !== undefined);
+      pc.card = { ...pc.card, value: v };
+    }
+  }
+
+  it("returns empty array when game is not finished", () => {
+    const e = new GameEngine(makeConfig());
+    e.createGame();
+    assert.deepEqual(e.winners, []);
+  });
+
+  it("caller wins when their total is strictly lowest", () => {
+    const e = playToFinished(["alice", "bob"], 42);
+    setHandValues(e, 0, [1, 1, 1, 1]); // alice (caller): 4
+    setHandValues(e, 1, [5, 5, 5, 5]); // bob: 20
+    assert.deepEqual(
+      e.winners.map((p) => p.id),
+      ["alice"],
+    );
+  });
+
+  it("caller loses on a tie — tied non-caller wins", () => {
+    const e = playToFinished(["alice", "bob"], 42);
+    setHandValues(e, 0, [5, 5, 5, 5]); // alice (caller): 20
+    setHandValues(e, 1, [5, 5, 5, 5]); // bob: 20 (tied)
+    assert.deepEqual(
+      e.winners.map((p) => p.id),
+      ["bob"],
+    );
+  });
+
+  it("non-caller with strictly lower total wins outright", () => {
+    const e = playToFinished(["alice", "bob"], 42);
+    setHandValues(e, 0, [10, 10, 10, 10]); // alice (caller): 40
+    setHandValues(e, 1, [1, 1, 1, 1]); // bob: 4
+    assert.deepEqual(
+      e.winners.map((p) => p.id),
+      ["bob"],
+    );
+  });
+
+  it("multiple non-callers tied for lowest both win; caller excluded", () => {
+    const e = playToFinished(["alice", "bob", "charlie"], 42);
+    setHandValues(e, 0, [10, 10, 10, 10]); // alice (caller): 40
+    setHandValues(e, 1, [1, 1, 1, 1]); // bob: 4
+    setHandValues(e, 2, [1, 1, 1, 1]); // charlie: 4
+    assert.deepEqual(e.winners.map((p) => p.id).sort(), ["bob", "charlie"]);
+  });
+
+  it("caller wins solo when tied with caller alone (single-player tie group is caller)", () => {
+    // Edge case: only the caller has the lowest total; no tie group, so caller is not excluded.
+    const e = playToFinished(["alice", "bob"], 42);
+    setHandValues(e, 0, [2, 2, 2, 2]); // alice (caller): 8
+    setHandValues(e, 1, [3, 3, 3, 3]); // bob: 12
+    assert.deepEqual(
+      e.winners.map((p) => p.id),
+      ["alice"],
+    );
+  });
+});
