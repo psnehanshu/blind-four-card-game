@@ -183,6 +183,31 @@ export class GameEngine {
     return result;
   }
 
+  get winners(): Player[] {
+    if (this.game.state !== "finished") return [];
+
+    // Determine winner(s) based on lowest hand value, with tiebreakers
+    let lowestValue = Infinity;
+    let winners: Player[] = [];
+
+    for (const player of this.game.players) {
+      const handValue = player.hand.reduce((sum, pc) => sum + pc.card.value, 0);
+      if (handValue < lowestValue) {
+        lowestValue = handValue;
+        winners = [player];
+      } else if (handValue === lowestValue) {
+        winners.push(player);
+      }
+    }
+
+    // If multiple players tie on hand value, exclude caller as their score must be strictly lower than all opponents to win
+    if (winners.length > 1 && this.game.callerId) {
+      winners = winners.filter((p) => p.id === this.game.callerId);
+    }
+
+    return winners;
+  }
+
   /** Build engine from a prior event log (replay). */
   static fromEventLog(eventLog: CommittedEvent[], config: EngineConfig): GameEngine {
     const engine = new GameEngine(config);
