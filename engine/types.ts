@@ -120,7 +120,7 @@ export interface PeekResult {
   /** The player whose cards were peeked at. */
   playerId: string
   /** The cards that were revealed. For opponent peek, only 1 card. */
-  cards: Array<{ index: number; card: Card }>
+  cards: { index: number; card: Card }[]
 }
 
 /** Returned by every GameEngine method call. */
@@ -142,7 +142,7 @@ export interface VisiblePlayerState {
   id: string
   name: string
   /** Lock markers on this player's cards (visible to all). */
-  lockedCards: Array<{ index: number; markerCard: Card }>
+  lockedCards: { index: number; markerCard: Card }[]
   /** Total cards held (always 4 in normal play). */
   handSize: number
   /** Whether this player is the current turn holder. */
@@ -163,7 +163,7 @@ export interface VisibleGameState {
   /** Player who called showdown, if any. */
   callerId?: string
   /** Own hand cards — only populated during initial_reveal and finished states. */
-  myHand?: Array<{ index: number; card: PlayerCard }>
+  myHand?: { index: number; card: PlayerCard }[]
   /** All active lock markers, visible to every player. */
   lockMarkers: LockMarker[]
 }

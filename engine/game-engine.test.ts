@@ -229,16 +229,15 @@ describe("GameEngine — turn flow", () => {
     e.createGame()
 
     // Deck is 54 - 8 = 46 cards. Draw until empty.
-    let pid = turnOrder(e)[0]
     for (let i = 0; i < 46; i++) {
-      pid = turnOrder(e)[0]
-      const r = e.processEvent(pid, "DRAW_CARD", { source: "deck" })
+      const currentPid = turnOrder(e)[0]
+      const r = e.processEvent(currentPid, "DRAW_CARD", { source: "deck" })
       if (r.error) break
-      e.processEvent(pid, "DISCARD_DRAWN")
-      if (e.getValidEvents(pid).includes("USE_POWER")) {
-        e.processEvent(pid, "USE_POWER", { power: "peek", target: "own" })
+      e.processEvent(currentPid, "DISCARD_DRAWN")
+      if (e.getValidEvents(currentPid).includes("USE_POWER")) {
+        e.processEvent(currentPid, "USE_POWER", { power: "peek", target: "own" })
       }
-      e.processEvent(pid, "END_TURN")
+      e.processEvent(currentPid, "END_TURN")
     }
 
     const r = e.processEvent(turnOrder(e)[0], "DRAW_CARD", { source: "deck" })
@@ -271,9 +270,10 @@ describe("GameEngine — powers", () => {
         target: "own",
       } as PowerAction)
       assert.equal(peekR.error, undefined)
-      assert.ok(peekR.peekResult)
-      assert.equal(peekR.peekResult!.playerId, pid)
-      assert.equal(peekR.peekResult!.cards.length, HAND_SIZE)
+      const { peekResult } = peekR
+      assert.ok(peekResult)
+      assert.equal(peekResult.playerId, pid)
+      assert.equal(peekResult.cards.length, HAND_SIZE)
     }
   })
 
@@ -508,7 +508,8 @@ describe("GameEngine — visibility", () => {
     assert.equal(vs.myHand, undefined)
 
     // Opponent should have handSize but no card details
-    const bob = vs.players.find(p => p.id === "bob")!
+    const bob = vs.players.find(p => p.id === "bob")
+    if (!bob) throw new Error("Bob not found")
     assert.equal(bob.handSize, HAND_SIZE)
   })
 

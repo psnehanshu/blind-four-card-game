@@ -287,7 +287,9 @@ export class GameEngine {
     if (target.locked) throw new Error("Cannot replace a locked card")
 
     // Put drawn card in hand, old card goes to discard
-    const drawnCard = this.drawnCard!
+    const { drawnCard } = this
+    if (!drawnCard) throw new Error("No card drawn yet")
+
     player.hand[handIndex] = { card: drawnCard, locked: false }
     this.drawnCard = null
 
@@ -296,7 +298,9 @@ export class GameEngine {
   }
 
   private applyDiscardDrawn(_event: CommittedEvent): void {
-    const drawnCard = this.drawnCard!
+    const { drawnCard } = this
+    if (!drawnCard) throw new Error("No card drawn yet")
+
     this.drawnCard = null
     this.discardAndCheckPower(drawnCard)
   }
@@ -316,7 +320,8 @@ export class GameEngine {
     // Determine effective power (handle joker mimic)
     let effectiveAction: PowerAction
     if (action.power === "joker") {
-      effectiveAction = action.action!
+      if (!action.action) throw new Error("Invalid joker action")
+      effectiveAction = action.action
     } else {
       effectiveAction = action
     }
@@ -515,7 +520,8 @@ export class GameEngine {
     for (let i = 0; i < this.config.playerIds.length; i++) {
       const hand: PlayerCard[] = []
       for (let j = 0; j < HAND_SIZE; j++) {
-        const card = deck.pop()!
+        const card = deck.pop()
+        if (!card) throw new Error("Deck exhausted during deal")
         hand.push({ card, locked: false })
       }
       players[i].hand = hand as [PlayerCard, PlayerCard, PlayerCard, PlayerCard]
