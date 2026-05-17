@@ -292,6 +292,47 @@ describe("GameEngine — turn flow", () => {
     });
     assert.ok(r.error);
   });
+
+  it("DISCARD_DRAWN of a non-power card skips USE_POWER and goes straight to showdown_eligible", () => {
+    // 2-player seed 0: top draw is 8 (non-power, value 0).
+    const e = new GameEngine(makeConfig({ playerIds: ["alice", "bob"], seed: 0 }));
+    e.createGame();
+    assert.equal(e.getState().deck.at(-1)?.rank, "8", "test seed must produce 8 on first draw");
+
+    e.processEvent("alice", "DRAW_CARD", { source: "deck" });
+    const discR = e.processEvent("alice", "DISCARD_DRAWN", undefined);
+    assert.equal(discR.error, undefined);
+    // No USE_POWER, but END_TURN should be available immediately.
+    assert.ok(!discR.validEvents.includes("USE_POWER"), "non-power discard must not trigger USE_POWER");
+    assert.ok(discR.validEvents.includes("END_TURN"), "non-power discard must allow END_TURN");
+
+    // USE_POWER attempt must be rejected — no pending power.
+    const badPower = e.processEvent("alice", "USE_POWER", { power: "peek", target: "own" });
+    assert.match(badPower.error ?? "", /No power to resolve|No pending power/);
+  });
+
+  it("REPLACE_CARD activates the discarded hand card's power", () => {
+    // 2-player seed 0: top draw is 8 (non-power); alice's hand[2] is a Q.
+    // Replacing hand[2] should put the Q on the discard pile AND trigger USE_POWER.
+    const e = new GameEngine(makeConfig({ playerIds: ["alice", "bob"], seed: 0 }));
+    e.createGame();
+    assert.equal(e.getState().players[0]?.hand[2]?.card.rank, "Q", "test seed must place Q at alice's hand[2]");
+
+    e.processEvent("alice", "DRAW_CARD", { source: "deck" });
+    const repR = e.processEvent("alice", "REPLACE_CARD", { handIndex: 2 });
+    assert.equal(repR.error, undefined);
+    assert.ok(repR.validEvents.includes("USE_POWER"), "replacing a Q must trigger USE_POWER phase");
+
+    // Following through with the Q swap must succeed.
+    const swapR = e.processEvent("alice", "USE_POWER", {
+      power: "swap",
+      sourcePlayerId: "alice",
+      sourceCardIndex: 0,
+      targetPlayerId: "bob",
+      targetCardIndex: 0,
+    });
+    assert.equal(swapR.error, undefined);
+  });
 });
 
 // ───────────────────────────────  Powers  ───────────────────────────────
