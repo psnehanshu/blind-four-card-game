@@ -281,6 +281,10 @@ export class GameEngine {
     } else if (eventType === "REPLACE_CARD" || eventType === "DISCARD_DRAWN") {
       if (this.phase !== "decision") return "Must replace or discard drawn card";
       if (!this.drawnCard) return "No card drawn yet";
+      if (this.isReplacePayload(eventType, payload)) {
+        const replaceError = this.validateReplaceTarget(payload.handIndex);
+        if (replaceError) return replaceError;
+      }
     } else if (this.isPowerPayload(eventType, payload)) {
       if (this.phase !== "power") return "No power to resolve";
       if (!this.pendingPowerRank) return "No pending power";
@@ -294,12 +298,10 @@ export class GameEngine {
         return "Invalid joker action: missing inner action";
       }
 
-      if (action.power === "peek" && action.target === "opponent") {
-        const opponent = this.game.players.find((p) => p.id === action.opponentId);
-        if (!opponent) return "Invalid opponentId";
-        const unlockedIdx = opponent.hand.findIndex((pc) => !pc.locked);
-        if (unlockedIdx === -1) return "No unlocked cards to peek at";
-      }
+      // Validate the effective inner action (swap/lock target sanity for both base + joker mimic)
+      const effective: BasePowerAction = action.power === "joker" ? action.action : action;
+      const targetError = this.validatePowerTargets(effective);
+      if (targetError) return targetError;
     } else if (eventType === "CALL_SHOWDOWN") {
       if (this.phase !== "showdown_eligible") return "Cannot call showdown now";
       if (this.game.state === "showdown") return "Showdown already in progress";
@@ -309,6 +311,62 @@ export class GameEngine {
       if (this.game.state === "showdown" && playerId === this.game.callerId) {
         return "Caller gets no more turns";
       }
+    }
+
+    return null;
+  }
+
+  /** Validates a REPLACE_CARD target. Returns an error message or null. */
+  private validateReplaceTarget(handIndex: number): string | null {
+    if (handIndex === undefined || handIndex < 0 || handIndex >= HAND_SIZE) {
+      return "Invalid hand index";
+    }
+    const player = this.game.players[this.game.currentTurn];
+    if (!player) return "Current player not found";
+    const target = player.hand[handIndex];
+    if (!target) return "Card not found in hand";
+    if (target.locked) return "Cannot replace a locked card";
+    return null;
+  }
+
+  /** Validates the effective (post-mimic) power action's target sanity. */
+  private validatePowerTargets(action: BasePowerAction): string | null {
+    if (action.power === "peek") {
+      if (action.target === "opponent") {
+        const opponent = this.game.players.find((p) => p.id === action.opponentId);
+        if (!opponent) return "Invalid opponentId";
+        if (opponent.hand.findIndex((pc) => !pc.locked) === -1) return "No unlocked cards to peek at";
+      }
+      return null;
+    }
+
+    if (action.power === "shuffle") {
+      const target = this.game.players.find((p) => p.id === action.targetPlayerId);
+      if (!target) return "Invalid target player";
+      return null;
+    }
+
+    if (action.power === "swap") {
+      const source = this.game.players.find((p) => p.id === action.sourcePlayerId);
+      const target = this.game.players.find((p) => p.id === action.targetPlayerId);
+      if (!source || !target) return "Invalid player in swap";
+      if (action.sourceCardIndex < 0 || action.sourceCardIndex >= HAND_SIZE) return "Invalid source card index";
+      if (action.targetCardIndex < 0 || action.targetCardIndex >= HAND_SIZE) return "Invalid target card index";
+      const sourcePC = source.hand[action.sourceCardIndex];
+      const targetPC = target.hand[action.targetCardIndex];
+      if (!sourcePC || !targetPC) return "Card not found for swap";
+      if (sourcePC.locked || targetPC.locked) return "Cannot swap locked card";
+      return null;
+    }
+
+    if (action.power === "lock") {
+      const target = this.game.players.find((p) => p.id === action.targetPlayerId);
+      if (!target) return "Invalid target player";
+      if (action.cardIndex < 0 || action.cardIndex >= HAND_SIZE) return "Invalid card index";
+      const playerCard = target.hand[action.cardIndex];
+      if (!playerCard) return "Card not found";
+      if (playerCard.locked) return "Card is already locked";
+      return null;
     }
 
     return null;

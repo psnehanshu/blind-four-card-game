@@ -229,9 +229,11 @@ describe("GameEngine — turn flow", () => {
     e.processEvent("bob", "END_TURN", undefined);
 
     // Alice draws again and attempts to replace her locked card 0.
-    // The engine throws from applyReplace (no validation upfront) — capture that.
     e.processEvent("alice", "DRAW_CARD", { source: "deck" });
-    assert.throws(() => e.processEvent("alice", "REPLACE_CARD", { handIndex: 0 }), /Cannot replace a locked card/);
+    const repR = e.processEvent("alice", "REPLACE_CARD", { handIndex: 0 });
+    assert.match(repR.error ?? "", /Cannot replace a locked card/);
+    // Card must still be locked and unchanged
+    assert.equal(e.getState().players[0]?.hand[0]?.locked, true);
   });
 
   it("discard drawn from discard pile works", () => {
@@ -421,18 +423,15 @@ describe("GameEngine — powers", () => {
     const discR = e.processEvent("alice", "DISCARD_DRAWN", undefined);
     assert.ok(discR.validEvents.includes("USE_POWER"), "discarding a Q must trigger USE_POWER phase");
 
-    // Source is locked → engine throws from applySwap (no upfront validation)
-    assert.throws(
-      () =>
-        e.processEvent("alice", "USE_POWER", {
-          power: "swap",
-          sourcePlayerId: "alice",
-          sourceCardIndex: 0, // locked
-          targetPlayerId: "bob",
-          targetCardIndex: 0,
-        }),
-      /Cannot swap locked card/,
-    );
+    // Source is locked → validation rejects gracefully
+    const swapR = e.processEvent("alice", "USE_POWER", {
+      power: "swap",
+      sourcePlayerId: "alice",
+      sourceCardIndex: 0, // locked
+      targetPlayerId: "bob",
+      targetCardIndex: 0,
+    });
+    assert.match(swapR.error ?? "", /Cannot swap locked card/);
 
     // Hands must be unchanged
     const aliceHandAfter = e.getState().players[0]?.hand.map((pc) => pc.card.id);
@@ -460,17 +459,14 @@ describe("GameEngine — powers", () => {
     e.processEvent("alice", "DRAW_CARD", { source: "deck" });
     e.processEvent("alice", "DISCARD_DRAWN", undefined);
 
-    assert.throws(
-      () =>
-        e.processEvent("alice", "USE_POWER", {
-          power: "swap",
-          sourcePlayerId: "alice",
-          sourceCardIndex: 1, // unlocked
-          targetPlayerId: "bob",
-          targetCardIndex: 0, // locked
-        }),
-      /Cannot swap locked card/,
-    );
+    const swapR = e.processEvent("alice", "USE_POWER", {
+      power: "swap",
+      sourcePlayerId: "alice",
+      sourceCardIndex: 1, // unlocked
+      targetPlayerId: "bob",
+      targetCardIndex: 0, // locked
+    });
+    assert.match(swapR.error ?? "", /Cannot swap locked card/);
 
     // Bob's locked card 0 must still be locked
     assert.equal(e.getState().players[1]?.hand[0]?.locked, true);
