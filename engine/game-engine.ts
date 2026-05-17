@@ -21,8 +21,6 @@ import { HAND_SIZE, MIN_PLAYERS, MAX_PLAYERS, MIN_TURNS_BEFORE_SHOWDOWN } from "
 import { createDeck, isPowerCard } from "./cards.js";
 import { SeededRNG } from "./rng.js";
 
-let eventIdCounter = 0;
-
 /** Maps card rank → expected action name for USE_POWER. */
 const POWER_ACTION_MAP: Record<string, string> = {
   "10": "peek",
@@ -34,20 +32,10 @@ const POWER_ACTION_MAP: Record<string, string> = {
 
 export class GameEngine {
   private config: EngineConfig;
-  private _game: Game | null = null;
+  private game: Game;
   private eventLog: CommittedEvent[];
   private rng: SeededRNG;
-
-  /** The underlying game state. Throws if not initialized. */
-  private get game(): Game {
-    if (!this._game) throw new Error("Game not initialized");
-    return this._game;
-  }
-
-  /** Sets the underlying game state. */
-  private set game(g: Game) {
-    this._game = g;
-  }
+  private eventIdCounter: number;
 
   // Internal turn-phase tracking
   private phase: TurnPhase;
@@ -60,8 +48,9 @@ export class GameEngine {
   private lastPeekResult: PeekResult | null;
 
   /**
-   * Initializes a new GameEngine instance.
-   * @param config - The initial configuration for the game engine.
+   * Constructs a fully-initialized GameEngine: validates the config,
+   * shuffles the deck, deals hands, and leaves the engine ready for the
+   * first DRAW_CARD.
    */
   constructor(config: EngineConfig) {
     if (config.playerIds.length < MIN_PLAYERS || config.playerIds.length > MAX_PLAYERS) {
@@ -73,6 +62,7 @@ export class GameEngine {
     this.config = { ...config };
     this.rng = new SeededRNG(config.seed ?? Date.now());
     this.eventLog = [];
+    this.eventIdCounter = 0;
     this.phase = "draw";
     this.drawnCard = null;
     this.totalTurnsTaken = 0;
@@ -81,16 +71,10 @@ export class GameEngine {
     this.lockMarkers = [];
     this.playersCompletedFinalTurn = new Set();
     this.lastPeekResult = null;
+    this.game = this.buildInitialGame();
   }
 
   // ────────────────────────────── Public API ──────────────────────────────
-
-  /** Create a game and deal cards. Returns the initial state. */
-  createGame(): EngineResult {
-    this.game = this.buildInitialGame();
-    this.phase = "draw";
-    return this.buildResult([]);
-  }
 
   /** Process a player action. Validates → commits → reduces → returns result. */
   processEvent<T extends ProposedEventType>(playerId: string, eventType: T, payload: EventPayloadMap[T]): EngineResult {
@@ -107,14 +91,19 @@ export class GameEngine {
     return this.buildResult([event]);
   }
 
-  /** Current game state (public fields only). */
+  /**
+   * Current game state (live reference — DO NOT mutate).
+   * Returns the engine's internal Game object directly. Callers that need
+   * a safe-to-mutate snapshot should use processEvent's nextState or
+   * getVisibleState, which are deep-cloned.
+   */
   getState(): Game {
     return this.game;
   }
 
   /** Event log for replay. */
   getEventLog(): CommittedEvent[] {
-    return [...this.eventLog];
+    return structuredClone(this.eventLog);
   }
 
   /** What events this player can perform right now. */
@@ -187,7 +176,7 @@ export class GameEngine {
       }
     }
 
-    return result;
+    return structuredClone(result);
   }
 
   /** Calculates the winners based on lowest hand value and tiebreaker rules. */
@@ -216,13 +205,27 @@ export class GameEngine {
     return winners;
   }
 
-  /** Build engine from a prior event log (replay). */
+  /**
+   * Build engine from a prior event log (replay).
+   * Pushes the original committed events into the log so getEventLog()
+   * on the replayed engine matches the source, and continued play
+   * appends to that sequence without restarting from zero.
+   */
   static fromEventLog(eventLog: CommittedEvent[], config: EngineConfig): GameEngine {
     const engine = new GameEngine(config);
-    engine.createGame();
     for (const event of eventLog) {
+      engine.eventLog.push(event);
       engine.applyEvent(event);
     }
+    // Bump the id counter past any replayed events so continued play
+    // doesn't collide with replayed ids (best-effort: only matters when
+    // both source and replay engines share this process).
+    let maxIdx = -1;
+    for (const event of eventLog) {
+      const match = /^evt-(\d+)$/.exec(event.id);
+      if (match?.[1]) maxIdx = Math.max(maxIdx, Number(match[1]));
+    }
+    engine.eventIdCounter = Math.max(engine.eventIdCounter, maxIdx + 1);
     return engine;
   }
 
@@ -234,7 +237,7 @@ export class GameEngine {
     type: T,
     payload: EventPayloadMap[T],
   ): CommittedEvent {
-    const id = `evt-${eventIdCounter++}`;
+    const id = `evt-${this.eventIdCounter++}`;
     const sequence = this.eventLog.length;
     const timestamp = Date.now();
 
@@ -336,6 +339,10 @@ export class GameEngine {
   private validatePowerTargets(action: BasePowerAction): string | null {
     if (action.power === "peek") {
       if (action.target === "opponent") {
+        const currentPlayerId = this.game.players[this.game.currentTurn]?.id;
+        if (action.opponentId === currentPlayerId) {
+          return "Opponent peek target cannot be self; use target: 'own'";
+        }
         const opponent = this.game.players.find((p) => p.id === action.opponentId);
         if (!opponent) return "Invalid opponentId";
         if (action.opponentCardIndex < 0 || action.opponentCardIndex >= HAND_SIZE) {
@@ -751,7 +758,7 @@ export class GameEngine {
     const validEvents = this.getValidEvents(currentPlayerId);
 
     const result: EngineResult = {
-      nextState: { ...this.game },
+      nextState: this.game,
       events,
       validEvents,
     };
@@ -761,6 +768,6 @@ export class GameEngine {
       this.lastPeekResult = null;
     }
 
-    return result;
+    return structuredClone(result);
   }
 }
