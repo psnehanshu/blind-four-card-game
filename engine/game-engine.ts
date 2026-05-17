@@ -38,11 +38,13 @@ export class GameEngine {
   private eventLog: CommittedEvent[];
   private rng: SeededRNG;
 
+  /** The underlying game state. Throws if not initialized. */
   private get game(): Game {
     if (!this._game) throw new Error("Game not initialized");
     return this._game;
   }
 
+  /** Sets the underlying game state. */
   private set game(g: Game) {
     this._game = g;
   }
@@ -57,6 +59,10 @@ export class GameEngine {
   private playersCompletedFinalTurn: Set<string>;
   private lastPeekResult: PeekResult | null;
 
+  /**
+   * Initializes a new GameEngine instance.
+   * @param config - The initial configuration for the game engine.
+   */
   constructor(config: EngineConfig) {
     if (config.playerIds.length < MIN_PLAYERS || config.playerIds.length > MAX_PLAYERS) {
       throw new Error(`Player count must be between ${MIN_PLAYERS} and ${MAX_PLAYERS}`);
@@ -180,6 +186,7 @@ export class GameEngine {
     return result;
   }
 
+  /** Calculates the winners based on lowest hand value and tiebreaker rules. */
   get winners(): Player[] {
     if (this.game.state !== "finished") return [];
 
@@ -217,6 +224,7 @@ export class GameEngine {
 
   // ────────────────────────── Private: Event Creation ──────────────────────
 
+  /** Creates a committed event with unique ID and sequence metadata. */
   private createCommittedEvent<T extends ProposedEventType>(
     playerId: string,
     type: T,
@@ -250,6 +258,7 @@ export class GameEngine {
 
   // ────────────────────────── Private: Validation ──────────────────────────
 
+  /** Validates if an action is legal given the current game state and phase. */
   private validateEvent<T extends ProposedEventType>(
     playerId: string,
     eventType: T,
@@ -306,20 +315,24 @@ export class GameEngine {
 
   // ────────────────────────── Private: Type Guards ──────────────────────
 
+  /** Type guard for DRAW_CARD payload. */
   private isDrawPayload(type: ProposedEventType, _payload: unknown): _payload is EventPayloadMap["DRAW_CARD"] {
     return type === "DRAW_CARD";
   }
 
+  /** Type guard for REPLACE_CARD payload. */
   private isReplacePayload(type: ProposedEventType, _payload: unknown): _payload is EventPayloadMap["REPLACE_CARD"] {
     return type === "REPLACE_CARD";
   }
 
+  /** Type guard for USE_POWER payload (PowerAction). */
   private isPowerPayload(type: ProposedEventType, _payload: unknown): _payload is PowerAction {
     return type === "USE_POWER";
   }
 
   // ────────────────────────── Private: Event Reducer ──────────────────────
 
+  /** Dispatches an event to the appropriate application logic. */
   private applyEvent(event: CommittedEvent): void {
     if (event.type === "DRAW_CARD") {
       this.applyDraw(event);
@@ -336,6 +349,7 @@ export class GameEngine {
     }
   }
 
+  /** Draws a card from the deck or discard pile. */
   private applyDraw(event: CommittedEvent<"DRAW_CARD">): void {
     const source = event.payload.source ?? "deck";
     let drawn: Card;
@@ -354,6 +368,7 @@ export class GameEngine {
     this.phase = "decision";
   }
 
+  /** Replaces a card in the player's hand with the drawn card. */
   private applyReplace(event: CommittedEvent<"REPLACE_CARD">): void {
     const handIndex = event.payload.handIndex;
     if (handIndex === undefined || handIndex < 0 || handIndex >= HAND_SIZE) {
@@ -375,6 +390,7 @@ export class GameEngine {
     this.discardAndCheckPower(target.card);
   }
 
+  /** Discards the drawn card and triggers any power check. */
   private applyDiscardDrawn(_event: CommittedEvent<"DISCARD_DRAWN">): void {
     const { drawnCard } = this;
     if (!drawnCard) throw new Error("No card drawn yet");
@@ -383,6 +399,7 @@ export class GameEngine {
     this.discardAndCheckPower(drawnCard);
   }
 
+  /** Initiates the showdown phase. */
   private applyCallShowdown(_event: CommittedEvent<"CALL_SHOWDOWN">): void {
     const callerId = this.game.players[this.game.currentTurn].id;
     this.game.state = "showdown";
@@ -391,6 +408,7 @@ export class GameEngine {
     this.advanceTurn();
   }
 
+  /** Resolves the special power of a card. */
   private applyUsePower(event: CommittedEvent<"USE_POWER">): void {
     const action = event.payload;
     if (!action || !action.power) throw new Error("Invalid power action");
@@ -422,12 +440,14 @@ export class GameEngine {
     this.phase = "showdown_eligible";
   }
 
+  /** Ends the current player's turn. */
   private applyEndTurn(_event: CommittedEvent<"END_TURN">): void {
     this.advanceTurn();
   }
 
   // ────────────────────── Private: Power Resolution ────────────────────────
 
+  /** Peeks at a player's own card or an opponent's card. */
   private applyPeek(action: BasePowerAction): void {
     if (action.power !== "peek") return;
 
@@ -453,6 +473,7 @@ export class GameEngine {
     }
   }
 
+  /** Shuffles the unlocked cards of a target player. */
   private applyShuffle(action: BasePowerAction): void {
     if (action.power !== "shuffle") return;
     const targetPlayer = this.game.players.find((p) => p.id === action.targetPlayerId);
@@ -472,6 +493,7 @@ export class GameEngine {
     }
   }
 
+  /** Swaps two unlocked cards between two players. */
   private applySwap(action: PowerAction & { power: "swap" }): void {
     const { sourcePlayerId, sourceCardIndex, targetPlayerId, targetCardIndex } = action;
 
@@ -486,6 +508,7 @@ export class GameEngine {
     targetPlayer.hand[targetCardIndex] = temp;
   }
 
+  /** Locks a target player's card, making it unswappable until the end of the game. */
   private applyLock(action: PowerAction & { power: "lock" }): void {
     const { targetPlayerId, cardIndex } = action;
 
@@ -514,6 +537,7 @@ export class GameEngine {
 
   // ────────────────────── Private: Helpers ────────────────────────────────
 
+  /** Discards a card and updates the game phase if it triggers a power action. */
   private discardAndCheckPower(card: Card): void {
     const powerRank = isPowerCard(card.rank) ? card.rank : null;
 
@@ -538,6 +562,7 @@ export class GameEngine {
     }
   }
 
+  /** Advances the game to the next player's turn or concludes the showdown. */
   private advanceTurn(): void {
     this.phase = "draw";
     this.drawnCard = null;
@@ -580,6 +605,7 @@ export class GameEngine {
     }
   }
 
+  /** Constructs the initial game state, shuffling the deck and dealing cards. */
   private buildInitialGame(): Game {
     const deck = this.rng.shuffle(createDeck());
     const players: Player[] = this.config.playerIds.map((id) => {
@@ -616,6 +642,7 @@ export class GameEngine {
     };
   }
 
+  /** Checks if the game is eligible for a showdown call. */
   private isShowdownEligible(): boolean {
     const currentPlayerId = this.game.players[this.game.currentTurn].id;
     // Every player (including the current caller) must have completed at least MIN_TURNS_BEFORE_SHOWDOWN
@@ -630,6 +657,7 @@ export class GameEngine {
     return (this.playerTurnCount.get(currentPlayerId) ?? 0) >= MIN_TURNS_BEFORE_SHOWDOWN;
   }
 
+  /** Packages the current engine state into a result format for the client. */
   private buildResult(events: CommittedEvent[]): EngineResult {
     const currentPlayerId = this.game.players[this.game.currentTurn].id;
     const validEvents = this.getValidEvents(currentPlayerId);
