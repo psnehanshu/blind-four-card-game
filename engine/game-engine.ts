@@ -199,7 +199,7 @@ export class GameEngine {
 
     // If multiple players tie on hand value, exclude caller as their score must be strictly lower than all opponents to win
     if (winners.length > 1 && this.game.callerId) {
-      winners = winners.filter((p) => p.id === this.game.callerId);
+      winners = winners.filter((p) => p.id !== this.game.callerId);
     }
 
     return winners;
@@ -282,6 +282,13 @@ export class GameEngine {
       }
       if (action.power === "joker" && !action.action) {
         return "Invalid joker action: missing inner action";
+      }
+
+      if (action.power === "peek" && action.target === "opponent") {
+        const opponent = this.game.players.find((p) => p.id === action.opponentId);
+        if (!opponent) return "Invalid opponentId";
+        const unlockedIdx = opponent.hand.findIndex((pc) => !pc.locked);
+        if (unlockedIdx === -1) return "No unlocked cards to peek at";
       }
     } else if (eventType === "CALL_SHOWDOWN") {
       if (this.phase !== "showdown_eligible") return "Cannot call showdown now";
