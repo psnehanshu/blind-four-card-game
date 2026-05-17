@@ -825,6 +825,70 @@ describe("GameEngine — visibility", () => {
     const vs = e.getVisibleState("bob");
     assert.ok(vs.discardPile.length > 0);
   });
+
+  it("myHand is populated at finished state for every player", () => {
+    // Reach finished: each player plays MIN_TURNS_BEFORE_SHOWDOWN turns,
+    // then alice calls showdown and the remaining players take their final turn.
+    const e = new GameEngine(makeConfig({ playerIds: ["alice", "bob"], seed: 42 }));
+    e.createGame();
+
+    const resolveAnyPower = (pid: string): void => {
+      if (!e.getValidEvents(pid).includes("USE_POWER")) return;
+      const others = turnOrder(e).filter((p) => p !== pid);
+      const firstOther = others[0];
+      const attempts: PowerAction[] = [
+        { power: "peek", target: "own" },
+        { power: "shuffle", targetPlayerId: pid },
+        { power: "lock", targetPlayerId: pid, cardIndex: 0 },
+        { power: "joker", mimicRank: "10", action: { power: "peek", target: "own" } },
+      ];
+      if (firstOther) {
+        attempts.push({
+          power: "swap",
+          sourcePlayerId: pid,
+          sourceCardIndex: 0,
+          targetPlayerId: firstOther,
+          targetCardIndex: 0,
+        });
+      }
+      for (const a of attempts) {
+        if (!e.processEvent(pid, "USE_POWER", a).error) return;
+      }
+      throw new Error(`no power attempt succeeded for ${pid}`);
+    };
+
+    const runTurn = (pid: string): void => {
+      e.processEvent(pid, "DRAW_CARD", { source: "deck" });
+      e.processEvent(pid, "DISCARD_DRAWN", undefined);
+      resolveAnyPower(pid);
+      e.processEvent(pid, "END_TURN", undefined);
+    };
+
+    for (let i = 0; i < MIN_TURNS_BEFORE_SHOWDOWN; i++) {
+      runTurn("alice");
+      runTurn("bob");
+    }
+    // Alice's showdown-calling turn.
+    e.processEvent("alice", "DRAW_CARD", { source: "deck" });
+    e.processEvent("alice", "DISCARD_DRAWN", undefined);
+    resolveAnyPower("alice");
+    e.processEvent("alice", "CALL_SHOWDOWN", undefined);
+    runTurn("bob");
+    assert.equal(e.getState().state, "finished");
+
+    // Each player's view should reveal their own hand.
+    for (const pid of ["alice", "bob"]) {
+      const vs = e.getVisibleState(pid);
+      assert.ok(vs.myHand, `${pid}'s myHand should be populated at finished`);
+      assert.equal(vs.myHand.length, HAND_SIZE);
+      const actual = e.getState().players.find((p) => p.id === pid);
+      assert.ok(actual);
+      for (let i = 0; i < HAND_SIZE; i++) {
+        assert.equal(vs.myHand[i]?.index, i);
+        assert.equal(vs.myHand[i]?.card.card.id, actual.hand[i]?.card.id);
+      }
+    }
+  });
 });
 
 // ───────────────────────────────  Edge Cases  ───────────────────────────────
