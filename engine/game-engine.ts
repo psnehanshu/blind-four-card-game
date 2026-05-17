@@ -46,6 +46,7 @@ export class GameEngine {
   private lockMarkers: LockMarker[];
   private playersCompletedFinalTurn: Set<string>;
   private lastPeekResult: PeekResult | null;
+  private playersAcknowledgedReveal: Set<string>;
 
   /**
    * Constructs a fully-initialized GameEngine: validates the config,
@@ -71,6 +72,7 @@ export class GameEngine {
     this.lockMarkers = [];
     this.playersCompletedFinalTurn = new Set();
     this.lastPeekResult = null;
+    this.playersAcknowledgedReveal = new Set();
     this.game = this.buildInitialGame();
   }
 
@@ -80,7 +82,7 @@ export class GameEngine {
   processEvent<T extends ProposedEventType>(playerId: string, eventType: T, payload: EventPayloadMap[T]): EngineResult {
     const error = this.validateEvent(playerId, eventType, payload);
     if (error) {
-      return { ...this.buildResult([]), error };
+      return { ...this.buildResult([], playerId), error };
     }
 
     const event = this.createCommittedEvent(playerId, eventType, payload);
@@ -88,7 +90,7 @@ export class GameEngine {
     this.eventLog.push(event);
     this.applyEvent(event);
 
-    return this.buildResult([event]);
+    return this.buildResult([event], playerId);
   }
 
   /**
@@ -110,11 +112,20 @@ export class GameEngine {
   getValidEvents(playerId: string): ProposedEventType[] {
     const valid: ProposedEventType[] = [];
 
-    // Must be this player's turn
+    if (this.game.state === "finished") return valid;
+
+    // During initial_reveal, every player can ACK independently of turn order.
+    if (this.game.state === "initial_reveal") {
+      const player = this.game.players.find((p) => p.id === playerId);
+      if (player && !this.playersAcknowledgedReveal.has(playerId)) {
+        valid.push("ACKNOWLEDGE_REVEAL");
+      }
+      return valid;
+    }
+
+    // Otherwise, only the current-turn player can act.
     const currentPlayer = this.game.players[this.game.currentTurn];
     if (!currentPlayer || currentPlayer.id !== playerId) return valid;
-
-    if (this.game.state === "finished") return valid;
 
     switch (this.phase) {
       case "draw":
@@ -242,6 +253,9 @@ export class GameEngine {
     const timestamp = Date.now();
 
     // Use type guards or explicit checks to satisfy Discriminated Union without 'as'
+    if (type === "ACKNOWLEDGE_REVEAL") {
+      return { id, sequence, timestamp, playerId, type: "ACKNOWLEDGE_REVEAL", payload: undefined };
+    }
     if (this.isDrawPayload(type, payload)) {
       return { id, sequence, timestamp, playerId, type: "DRAW_CARD", payload };
     }
@@ -272,6 +286,17 @@ export class GameEngine {
     payload: EventPayloadMap[T],
   ): string | null {
     if (this.game.state === "finished") return "Game is already finished";
+
+    // initial_reveal: every player must acknowledge before play begins.
+    if (this.game.state === "initial_reveal") {
+      if (eventType !== "ACKNOWLEDGE_REVEAL") return "Game has not started yet";
+      const player = this.game.players.find((p) => p.id === playerId);
+      if (!player) return "Unknown player";
+      if (this.playersAcknowledgedReveal.has(playerId)) return "Already acknowledged reveal";
+      return null;
+    }
+
+    if (eventType === "ACKNOWLEDGE_REVEAL") return "Reveal phase already complete";
 
     const currentPlayer = this.game.players[this.game.currentTurn];
     if (!currentPlayer || currentPlayer.id !== playerId) return "Not your turn";
@@ -348,9 +373,7 @@ export class GameEngine {
         if (action.opponentCardIndex < 0 || action.opponentCardIndex >= HAND_SIZE) {
           return "Invalid opponentCardIndex";
         }
-        const targetCard = opponent.hand[action.opponentCardIndex];
-        if (!targetCard) return "Card not found";
-        if (targetCard.locked) return "Cannot peek a locked card";
+        if (!opponent.hand[action.opponentCardIndex]) return "Card not found";
       }
       return null;
     }
@@ -409,7 +432,9 @@ export class GameEngine {
 
   /** Dispatches an event to the appropriate application logic. */
   private applyEvent(event: CommittedEvent): void {
-    if (event.type === "DRAW_CARD") {
+    if (event.type === "ACKNOWLEDGE_REVEAL") {
+      this.applyAcknowledgeReveal(event);
+    } else if (event.type === "DRAW_CARD") {
       this.applyDraw(event);
     } else if (event.type === "REPLACE_CARD") {
       this.applyReplace(event);
@@ -421,6 +446,14 @@ export class GameEngine {
       this.applyUsePower(event);
     } else if (event.type === "END_TURN") {
       this.applyEndTurn(event);
+    }
+  }
+
+  /** Records a player's reveal acknowledgment; starts play when all have ack'd. */
+  private applyAcknowledgeReveal(event: CommittedEvent<"ACKNOWLEDGE_REVEAL">): void {
+    this.playersAcknowledgedReveal.add(event.playerId);
+    if (this.playersAcknowledgedReveal.size === this.game.players.length) {
+      this.game.state = "in_progress";
     }
   }
 
@@ -729,7 +762,7 @@ export class GameEngine {
       deck,
       discardPile: [],
       currentTurn: 0,
-      state: "in_progress",
+      state: "initial_reveal",
     };
   }
 
@@ -750,12 +783,16 @@ export class GameEngine {
     return (this.playerTurnCount.get(currentPlayerId) ?? 0) >= MIN_TURNS_BEFORE_SHOWDOWN;
   }
 
-  /** Packages the current engine state into a result format for the client. */
-  private buildResult(events: CommittedEvent[]): EngineResult {
-    const currentPlayer = this.game.players[this.game.currentTurn];
-    if (!currentPlayer) throw new Error("Current player not found");
-    const currentPlayerId = currentPlayer.id;
-    const validEvents = this.getValidEvents(currentPlayerId);
+  /**
+   * Packages the current engine state into a result format for the client.
+   * `validEvents` reflects what the **actor** can do next (relevant during
+   * initial_reveal where multiple players act in parallel); falls back to
+   * the current-turn player when no actor is given.
+   */
+  private buildResult(events: CommittedEvent[], actorId?: string): EngineResult {
+    const focusId = actorId ?? this.game.players[this.game.currentTurn]?.id;
+    if (!focusId) throw new Error("No player to focus result on");
+    const validEvents = this.getValidEvents(focusId);
 
     const result: EngineResult = {
       nextState: this.game,

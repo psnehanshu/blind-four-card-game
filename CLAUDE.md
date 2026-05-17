@@ -37,7 +37,7 @@ Current scripts target the engine. Expect them to evolve as form factors land.
 
 `engine/SPEC.md` is the authoritative rules spec — read it before changing game rules.
 
-**Core module: `engine/game-engine.ts`.** `GameEngine` is fully initialized in the constructor (deck shuffled, hands dealt, ready for first `DRAW_CARD`). There is no separate `createGame()` method; `game: Game` is non-nullable.
+**Core module: `engine/game-engine.ts`.** `GameEngine` is fully initialized in the constructor (deck shuffled, hands dealt). State starts in `initial_reveal` — every player must `ACKNOWLEDGE_REVEAL` before play begins; once all have ack'd, state transitions to `in_progress`. There is no separate `createGame()` method; `game: Game` is non-nullable.
 
 **Event-sourced, server-authoritative, deterministic.** Every player action goes through:
 
@@ -47,11 +47,13 @@ Current scripts target the engine. Expect them to evolve as form factors land.
 4. `applyEvent` → one of `applyDraw` / `applyReplace` / `applyDiscardDrawn` / `applyCallShowdown` / `applyUsePower` / `applyEndTurn` — trusted reducer; throws on invariant violation (these should be unreachable after validation)
 5. `buildResult` packages `nextState`, `events`, `validEvents`, optional `peekResult` / `error`
 
-**Turn phase state machine** (`TurnPhase` in types.ts): `draw → decision → (power → )? showdown_eligible`. `getValidEvents` returns the actions allowed for the current phase. Power activation funnels through `discardAndCheckPower(card)`, called by both `applyReplace` (hand card → discard) and `applyDiscardDrawn` (drawn card → discard). Drawing from the discard pile does **not** trigger powers — the spec rule "discard-drawn power cards activate only on future discard" is implemented by `applyDraw` simply not calling `discardAndCheckPower`.
+**Game-state lifecycle** (`GameState` in types.ts): `initial_reveal → in_progress → showdown → finished`. During `initial_reveal`, any player can `ACKNOWLEDGE_REVEAL` independent of turn order; other actions are rejected with "Game has not started yet".
+
+**Turn phase state machine** (`TurnPhase` in types.ts), only meaningful once state is `in_progress`/`showdown`: `draw → decision → (power → )? showdown_eligible`. `getValidEvents` returns the actions allowed for the current phase. Power activation funnels through `discardAndCheckPower(card)`, called by both `applyReplace` (hand card → discard) and `applyDiscardDrawn` (drawn card → discard). Drawing from the discard pile does **not** trigger powers — the spec rule "discard-drawn power cards activate only on future discard" is implemented by `applyDraw` simply not calling `discardAndCheckPower`.
 
 **Powers** (`USE_POWER` payload is a `PowerAction` discriminated union):
 
-- 10 = peek (own = all 4 own cards; opponent = one chosen card via `opponentCardIndex`, must be unlocked, must not be self)
+- 10 = peek (own = all 4 own cards; opponent = one chosen card via `opponentCardIndex`, must not be self — locked cards may be peeked)
 - J = shuffle (target player's unlocked positions; locks preserved in place)
 - Q = swap (two **different** players, both cards unlocked)
 - K = lock (target's card; King is removed from discard and placed as a face-up `LockMarker`, never re-enters discard)
@@ -80,3 +82,4 @@ All four `applyPeek/Shuffle/Swap/Lock` take `BasePowerAction & { power: "<rank>"
 - Commit subjects are short imperatives ending in a period; bodies explain the _why_. See recent `git log` for style.
 - Tests live alongside source (`engine/foo.ts` + `engine/foo.test.ts`).
 - Test seeds in `game-engine.test.ts` are chosen for deterministic first-draw ranks (seed 0 = 8, seed 17 = 10, seed 2 = JOKER, seed 9 = Q, seed 999 = K). Reuse these when setting up power-trigger scenarios rather than inventing new seeds.
+- Use the `startGame(overrides?)` test helper for any test that needs an `in_progress` engine — it constructs + acks all players. Use `new GameEngine(makeConfig(...))` directly only when probing initial_reveal itself or testing constructor throws.

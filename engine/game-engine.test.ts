@@ -13,6 +13,23 @@ function makeConfig(overrides?: Partial<EngineConfig>): EngineConfig {
   };
 }
 
+/** Acknowledges initial reveal for every player. After this call,
+ *  state === "in_progress" and the first player can DRAW_CARD. */
+function ackAll(engine: GameEngine): void {
+  for (const p of engine.getState().players) {
+    engine.processEvent(p.id, "ACKNOWLEDGE_REVEAL", undefined);
+  }
+}
+
+/** Constructs an engine and immediately completes initial_reveal so the
+ *  game is ready for the in_progress phase tests rely on. Tests that
+ *  want to probe initial_reveal itself should use `new GameEngine` directly. */
+function startGame(overrides?: Partial<EngineConfig>): GameEngine {
+  const engine = new GameEngine(makeConfig(overrides));
+  ackAll(engine);
+  return engine;
+}
+
 type PlayerId = string;
 function turnOrder(engine: GameEngine): PlayerId[] {
   return engine.getState().players.map((p) => p.id);
@@ -22,50 +39,50 @@ function turnOrder(engine: GameEngine): PlayerId[] {
 
 describe("GameEngine — construction", () => {
   it("deals 4 cards per player", () => {
-    const engine = new GameEngine(makeConfig());
+    const engine = startGame();
     for (const player of engine.getState().players) {
       assert.equal(player.hand.length, HAND_SIZE);
     }
   });
 
   it("creates correct number of players", () => {
-    const engine = new GameEngine(makeConfig({ playerIds: ["a", "b"] }));
+    const engine = startGame({ playerIds: ["a", "b"] });
     assert.equal(engine.getState().players.length, 2);
   });
 
   it("deck size = 54 - (players * 4)", () => {
-    const engine = new GameEngine(makeConfig({ playerIds: ["a", "b", "c", "d"] }));
+    const engine = startGame({ playerIds: ["a", "b", "c", "d"] });
     assert.equal(engine.getState().deck.length, 54 - 4 * 4);
   });
 
   it("state is in_progress", () => {
-    const engine = new GameEngine(makeConfig());
+    const engine = startGame();
     assert.equal(engine.getState().state, "in_progress");
   });
 
   it("current turn is player 0", () => {
-    const engine = new GameEngine(makeConfig());
+    const engine = startGame();
     assert.equal(engine.getState().currentTurn, 0);
   });
 
   it("valid events for first player include DRAW_CARD", () => {
-    const engine = new GameEngine(makeConfig());
+    const engine = startGame();
     const events = engine.getValidEvents("alice");
     assert.deepEqual(events, ["DRAW_CARD"]);
   });
 
   it("rejects invalid player count", () => {
-    assert.throws(() => new GameEngine(makeConfig({ playerIds: ["a"] })));
-    assert.throws(() => new GameEngine(makeConfig({ playerIds: ["a", "b", "c", "d", "e", "f", "g"] })));
+    assert.throws(() => startGame({ playerIds: ["a"] }));
+    assert.throws(() => startGame({ playerIds: ["a", "b", "c", "d", "e", "f", "g"] }));
   });
 
   it("rejects duplicate playerIds", () => {
-    assert.throws(() => new GameEngine(makeConfig({ playerIds: ["alice", "bob", "alice"] })), /Player IDs must be unique/);
+    assert.throws(() => startGame({ playerIds: ["alice", "bob", "alice"] }), /Player IDs must be unique/);
   });
 
   it("same seed produces same deal", () => {
-    const e1 = new GameEngine(makeConfig({ seed: 100 }));
-    const e2 = new GameEngine(makeConfig({ seed: 100 }));
+    const e1 = startGame({ seed: 100 });
+    const e2 = startGame({ seed: 100 });
     const g1 = e1.getState();
     const g2 = e2.getState();
     for (let i = 0; i < g1.players.length; i++) {
@@ -82,11 +99,82 @@ describe("GameEngine — construction", () => {
   });
 });
 
+// ───────────────────────────────  Initial Reveal  ───────────────────────────────
+
+describe("GameEngine — initial reveal", () => {
+  it("starts in state=initial_reveal", () => {
+    const e = new GameEngine(makeConfig());
+    assert.equal(e.getState().state, "initial_reveal");
+  });
+
+  it("each player can ACKNOWLEDGE_REVEAL independent of turn order", () => {
+    // Even non-currentTurn players are valid actors during initial_reveal.
+    const e = new GameEngine(makeConfig());
+    assert.deepEqual(e.getValidEvents("alice"), ["ACKNOWLEDGE_REVEAL"]);
+    assert.deepEqual(e.getValidEvents("bob"), ["ACKNOWLEDGE_REVEAL"]);
+    assert.deepEqual(e.getValidEvents("charlie"), ["ACKNOWLEDGE_REVEAL"]);
+
+    // Bob acks first (out of turn order). Bob is then waiting.
+    assert.equal(e.processEvent("bob", "ACKNOWLEDGE_REVEAL", undefined).error, undefined);
+    assert.deepEqual(e.getValidEvents("bob"), []);
+    // Others can still ack.
+    assert.deepEqual(e.getValidEvents("alice"), ["ACKNOWLEDGE_REVEAL"]);
+  });
+
+  it("rejects other actions during initial_reveal", () => {
+    const e = new GameEngine(makeConfig());
+    const r = e.processEvent("alice", "DRAW_CARD", { source: "deck" });
+    assert.match(r.error ?? "", /Game has not started yet/);
+  });
+
+  it("rejects acknowledging twice", () => {
+    const e = new GameEngine(makeConfig());
+    assert.equal(e.processEvent("alice", "ACKNOWLEDGE_REVEAL", undefined).error, undefined);
+    const r = e.processEvent("alice", "ACKNOWLEDGE_REVEAL", undefined);
+    assert.match(r.error ?? "", /Already acknowledged/);
+  });
+
+  it("rejects unknown player ack", () => {
+    const e = new GameEngine(makeConfig());
+    const r = e.processEvent("ghost", "ACKNOWLEDGE_REVEAL", undefined);
+    assert.match(r.error ?? "", /Unknown player/);
+  });
+
+  it("state transitions to in_progress only after every player acks", () => {
+    const e = new GameEngine(makeConfig());
+    e.processEvent("alice", "ACKNOWLEDGE_REVEAL", undefined);
+    assert.equal(e.getState().state, "initial_reveal");
+    e.processEvent("bob", "ACKNOWLEDGE_REVEAL", undefined);
+    assert.equal(e.getState().state, "initial_reveal");
+    e.processEvent("charlie", "ACKNOWLEDGE_REVEAL", undefined);
+    assert.equal(e.getState().state, "in_progress");
+    // Once in_progress, the first turn (alice) can DRAW_CARD.
+    assert.deepEqual(e.getValidEvents("alice"), ["DRAW_CARD"]);
+  });
+
+  it("rejects ACKNOWLEDGE_REVEAL once play has begun", () => {
+    const e = startGame();
+    const r = e.processEvent("alice", "ACKNOWLEDGE_REVEAL", undefined);
+    assert.match(r.error ?? "", /Reveal phase already complete/);
+  });
+
+  it("ACKNOWLEDGE_REVEAL events are recorded in the event log and replay correctly", () => {
+    const e1 = new GameEngine(makeConfig({ seed: 7 }));
+    ackAll(e1);
+    const log = e1.getEventLog();
+    assert.equal(log.length, 3, "one ack per player");
+    assert.ok(log.every((evt) => evt.type === "ACKNOWLEDGE_REVEAL"));
+
+    const e2 = GameEngine.fromEventLog(log, makeConfig({ seed: 7 }));
+    assert.equal(e2.getState().state, "in_progress");
+  });
+});
+
 // ───────────────────────────────  Turn Flow  ───────────────────────────────
 
 describe("GameEngine — turn flow", () => {
   function setup(): GameEngine {
-    const e = new GameEngine(makeConfig());
+    const e = startGame();
     return e;
   }
 
@@ -201,7 +289,7 @@ describe("GameEngine — turn flow", () => {
   it("rejects replace of locked card", () => {
     // 2-player seed 7 yields draws K → 7 → 8: alice locks K, bob discards a non-power 7,
     // then alice's next draw (8) lets her try to replace her locked card directly.
-    const e = new GameEngine(makeConfig({ playerIds: ["alice", "bob"], seed: 7 }));
+    const e = startGame({ playerIds: ["alice", "bob"], seed: 7 });
     assert.equal(e.getState().deck.at(-1)?.rank, "K", "test seed must produce K on first draw");
 
     // Alice draws K, discards, locks her own card 0
@@ -248,7 +336,7 @@ describe("GameEngine — turn flow", () => {
   });
 
   it("deck draw is rejected when deck is empty", () => {
-    const e = new GameEngine(makeConfig({ playerIds: ["a", "b"], seed: 1 }));
+    const e = startGame({ playerIds: ["a", "b"], seed: 1 });
     const players = turnOrder(e);
     const p0 = players[0];
     assert.ok(p0);
@@ -288,7 +376,7 @@ describe("GameEngine — turn flow", () => {
 
   it("DISCARD_DRAWN of a non-power card skips USE_POWER and goes straight to showdown_eligible", () => {
     // 2-player seed 0: top draw is 8 (non-power, value 0).
-    const e = new GameEngine(makeConfig({ playerIds: ["alice", "bob"], seed: 0 }));
+    const e = startGame({ playerIds: ["alice", "bob"], seed: 0 });
     assert.equal(e.getState().deck.at(-1)?.rank, "8", "test seed must produce 8 on first draw");
 
     e.processEvent("alice", "DRAW_CARD", { source: "deck" });
@@ -306,7 +394,7 @@ describe("GameEngine — turn flow", () => {
   it("DRAW_CARD from discard does NOT activate the drawn power card", () => {
     // 2-player seed 0: alice's hand[2] is a Q. Replace it onto the discard
     // so the top of discard is a Q, then bob draws from discard.
-    const e = new GameEngine(makeConfig({ playerIds: ["alice", "bob"], seed: 0 }));
+    const e = startGame({ playerIds: ["alice", "bob"], seed: 0 });
     assert.equal(e.getState().players[0]?.hand[2]?.card.rank, "Q", "test seed must place Q at alice's hand[2]");
 
     e.processEvent("alice", "DRAW_CARD", { source: "deck" });
@@ -330,7 +418,7 @@ describe("GameEngine — turn flow", () => {
   it("DISCARD_DRAWN of a discard-drawn power card activates the power", () => {
     // Same setup as the prior test, but bob discards the drawn Q — that
     // future discard should activate the swap power.
-    const e = new GameEngine(makeConfig({ playerIds: ["alice", "bob"], seed: 0 }));
+    const e = startGame({ playerIds: ["alice", "bob"], seed: 0 });
     e.processEvent("alice", "DRAW_CARD", { source: "deck" });
     e.processEvent("alice", "REPLACE_CARD", { handIndex: 2 });
     e.processEvent("alice", "USE_POWER", {
@@ -360,7 +448,7 @@ describe("GameEngine — turn flow", () => {
   it("REPLACE_CARD activates the discarded hand card's power", () => {
     // 2-player seed 0: top draw is 8 (non-power); alice's hand[2] is a Q.
     // Replacing hand[2] should put the Q on the discard pile AND trigger USE_POWER.
-    const e = new GameEngine(makeConfig({ playerIds: ["alice", "bob"], seed: 0 }));
+    const e = startGame({ playerIds: ["alice", "bob"], seed: 0 });
     assert.equal(e.getState().players[0]?.hand[2]?.card.rank, "Q", "test seed must place Q at alice's hand[2]");
 
     e.processEvent("alice", "DRAW_CARD", { source: "deck" });
@@ -385,7 +473,7 @@ describe("GameEngine — turn flow", () => {
 describe("GameEngine — powers", () => {
   it("Peek (10) — can peek own cards and returns info", () => {
     // seed 17 (3 players) deterministically yields a 10 as the first deck draw
-    const e = new GameEngine(makeConfig({ seed: 17 }));
+    const e = startGame({ seed: 17 });
     const players = turnOrder(e);
     const pid = players[0];
     assert.ok(pid);
@@ -409,7 +497,7 @@ describe("GameEngine — powers", () => {
 
   it("Peek (10) — returns exactly the chosen opponent card", () => {
     // seed 17 (3 players) deterministically yields a 10 as the first deck draw
-    const e = new GameEngine(makeConfig({ seed: 17 }));
+    const e = startGame({ seed: 17 });
     const players = turnOrder(e);
     const pid = players[0];
     const opponentId = players[1];
@@ -443,7 +531,7 @@ describe("GameEngine — powers", () => {
 
   it("Lock (K) — locks a card and creates a marker", () => {
     // seed 999 (3 players) deterministically yields a K as the first deck draw
-    const e = new GameEngine(makeConfig({ seed: 999 }));
+    const e = startGame({ seed: 999 });
     const players = turnOrder(e);
     const pid = players[0];
     assert.ok(pid);
@@ -469,7 +557,7 @@ describe("GameEngine — powers", () => {
 
   it("Lock (K) — marker card is kept out of the discard pile", () => {
     // seed 999 (3 players): top deck draw is K
-    const e = new GameEngine(makeConfig({ seed: 999 }));
+    const e = startGame({ seed: 999 });
     const players = turnOrder(e);
     const pid = players[0];
     assert.ok(pid);
@@ -505,7 +593,7 @@ describe("GameEngine — powers", () => {
 
   it("Swap (Q) — swaps cards between players", () => {
     // seed 9 (3 players) deterministically yields a Q as the first deck draw
-    const e = new GameEngine(makeConfig({ seed: 9 }));
+    const e = startGame({ seed: 9 });
     const players = turnOrder(e);
     const pid = players[0];
     const pid2 = players[1];
@@ -550,7 +638,7 @@ describe("GameEngine — powers", () => {
     //   - alice turn 1 draws K → locks her card 0
     //   - bob turn 1 draws 7 → harmless discard
     //   - alice turn 2 draws Q → attempts swap of her locked card
-    const e = new GameEngine(makeConfig({ playerIds: ["alice", "bob"], seed: 26 }));
+    const e = startGame({ playerIds: ["alice", "bob"], seed: 26 });
     const deck = e.getState().deck;
     assert.equal(deck.at(-1)?.rank, "K", "test seed must produce K on alice's first draw");
     assert.equal(deck.at(-3)?.rank, "Q", "test seed must produce Q on alice's second draw");
@@ -596,7 +684,7 @@ describe("GameEngine — powers", () => {
 
   it("Swap (Q) — rejects swap when target card is locked", () => {
     // Same seed as above; this time alice locks bob's card 0, then swaps with it as target.
-    const e = new GameEngine(makeConfig({ playerIds: ["alice", "bob"], seed: 26 }));
+    const e = startGame({ playerIds: ["alice", "bob"], seed: 26 });
 
     e.processEvent("alice", "DRAW_CARD", { source: "deck" });
     e.processEvent("alice", "DISCARD_DRAWN", undefined);
@@ -625,7 +713,7 @@ describe("GameEngine — powers", () => {
 
   it("Shuffle (J) — shuffles unlocked cards of target player", () => {
     // seed 37 (3 players) deterministically yields a J as the first deck draw
-    const e = new GameEngine(makeConfig({ seed: 37 }));
+    const e = startGame({ seed: 37 });
     const players = turnOrder(e);
     const pid = players[0];
     const pid2 = players[1];
@@ -654,7 +742,7 @@ describe("GameEngine — powers", () => {
   });
 
   it("Peek (10) — rejects opponent peek with unknown opponentId", () => {
-    const e = new GameEngine(makeConfig({ seed: 17 }));
+    const e = startGame({ seed: 17 });
     const pid = turnOrder(e)[0];
     assert.ok(pid);
     e.processEvent(pid, "DRAW_CARD", { source: "deck" });
@@ -669,8 +757,9 @@ describe("GameEngine — powers", () => {
     assert.match(r.error ?? "", /Invalid opponentId/);
   });
 
-  it("Peek (10) — rejects opponent peek when the chosen card is locked", () => {
-    const e = new GameEngine(makeConfig({ seed: 17 }));
+  it("Peek (10) — allows opponent peek of a locked card", () => {
+    // Per spec: locked opponent cards may be peeked.
+    const e = startGame({ seed: 17 });
     const pid = turnOrder(e)[0];
     const oppId = turnOrder(e)[1];
     assert.ok(pid && oppId);
@@ -682,6 +771,7 @@ describe("GameEngine — powers", () => {
     const targetCard = opponent.hand[1];
     assert.ok(targetCard);
     targetCard.locked = true;
+    const expectedId = targetCard.card.id;
 
     const r = e.processEvent(pid, "USE_POWER", {
       power: "peek",
@@ -689,11 +779,12 @@ describe("GameEngine — powers", () => {
       opponentId: oppId,
       opponentCardIndex: 1,
     });
-    assert.match(r.error ?? "", /Cannot peek a locked card/);
+    assert.equal(r.error, undefined);
+    assert.equal(r.peekResult?.cards[0]?.card.id, expectedId);
   });
 
   it("Peek (10) — rejects opponent peek targeting self", () => {
-    const e = new GameEngine(makeConfig({ seed: 17 }));
+    const e = startGame({ seed: 17 });
     const pid = turnOrder(e)[0];
     assert.ok(pid);
     e.processEvent(pid, "DRAW_CARD", { source: "deck" });
@@ -709,7 +800,7 @@ describe("GameEngine — powers", () => {
   });
 
   it("Peek (10) — rejects opponent peek with out-of-range cardIndex", () => {
-    const e = new GameEngine(makeConfig({ seed: 17 }));
+    const e = startGame({ seed: 17 });
     const pid = turnOrder(e)[0];
     const oppId = turnOrder(e)[1];
     assert.ok(pid && oppId);
@@ -726,7 +817,7 @@ describe("GameEngine — powers", () => {
   });
 
   it("Shuffle (J) — rejects unknown target player", () => {
-    const e = new GameEngine(makeConfig({ seed: 37 }));
+    const e = startGame({ seed: 37 });
     const pid = turnOrder(e)[0];
     assert.ok(pid);
     e.processEvent(pid, "DRAW_CARD", { source: "deck" });
@@ -740,7 +831,7 @@ describe("GameEngine — powers", () => {
   });
 
   it("Swap (Q) — rejects unknown source/target players", () => {
-    const e = new GameEngine(makeConfig({ seed: 9 }));
+    const e = startGame({ seed: 9 });
     const pid = turnOrder(e)[0];
     const pid2 = turnOrder(e)[1];
     assert.ok(pid && pid2);
@@ -767,7 +858,7 @@ describe("GameEngine — powers", () => {
   });
 
   it("Swap (Q) — rejects same source and target player", () => {
-    const e = new GameEngine(makeConfig({ seed: 9 }));
+    const e = startGame({ seed: 9 });
     const pid = turnOrder(e)[0];
     assert.ok(pid);
     e.processEvent(pid, "DRAW_CARD", { source: "deck" });
@@ -784,7 +875,7 @@ describe("GameEngine — powers", () => {
   });
 
   it("Swap (Q) — rejects out-of-range card indices", () => {
-    const e = new GameEngine(makeConfig({ seed: 9 }));
+    const e = startGame({ seed: 9 });
     const pid = turnOrder(e)[0];
     const pid2 = turnOrder(e)[1];
     assert.ok(pid && pid2);
@@ -811,7 +902,7 @@ describe("GameEngine — powers", () => {
   });
 
   it("Lock (K) — rejects unknown target player", () => {
-    const e = new GameEngine(makeConfig({ seed: 999 }));
+    const e = startGame({ seed: 999 });
     const pid = turnOrder(e)[0];
     assert.ok(pid);
     e.processEvent(pid, "DRAW_CARD", { source: "deck" });
@@ -826,7 +917,7 @@ describe("GameEngine — powers", () => {
   });
 
   it("Lock (K) — rejects out-of-range card index", () => {
-    const e = new GameEngine(makeConfig({ seed: 999 }));
+    const e = startGame({ seed: 999 });
     const pid = turnOrder(e)[0];
     assert.ok(pid);
     e.processEvent(pid, "DRAW_CARD", { source: "deck" });
@@ -850,7 +941,7 @@ describe("GameEngine — powers", () => {
   it("Lock (K) — rejects locking an already-locked card", () => {
     // 2-player seed 7: alice draws K, bob draws 7, alice draws 8 — but we need K then K.
     // Easier path: lock card 0 manually, then try to lock it again via 3p seed 999.
-    const e = new GameEngine(makeConfig({ seed: 999 }));
+    const e = startGame({ seed: 999 });
     const pid = turnOrder(e)[0];
     assert.ok(pid);
     e.processEvent(pid, "DRAW_CARD", { source: "deck" });
@@ -875,7 +966,7 @@ describe("GameEngine — powers", () => {
     // 2-player seed 58: alice T1 draws K → locks bob's card 0,
     // bob T1 draws 7 (non-power) → harmless discard,
     // alice T2 draws J → shuffles bob.
-    const e = new GameEngine(makeConfig({ playerIds: ["alice", "bob"], seed: 58 }));
+    const e = startGame({ playerIds: ["alice", "bob"], seed: 58 });
     const deck = e.getState().deck;
     assert.equal(deck.at(-1)?.rank, "K", "test seed must produce K on alice's first draw");
     assert.equal(deck.at(-3)?.rank, "J", "test seed must produce J on alice's second draw");
@@ -923,7 +1014,7 @@ describe("GameEngine — powers", () => {
 
 describe("GameEngine — showdown", () => {
   it("cannot call showdown before 2 turns per player", () => {
-    const e = new GameEngine(makeConfig({ playerIds: ["a", "b"], seed: 42 }));
+    const e = startGame({ playerIds: ["a", "b"], seed: 42 });
     const players = turnOrder(e);
     const pid = players[0];
     assert.ok(pid);
@@ -937,7 +1028,7 @@ describe("GameEngine — showdown", () => {
   });
 
   it("can call showdown and complete the game", () => {
-    const e = new GameEngine(makeConfig({ playerIds: ["a", "b"], seed: 42 }));
+    const e = startGame({ playerIds: ["a", "b"], seed: 42 });
 
     // Helper: play one full turn for a player (draw → discard → resolve power → end)
     function playTurn(pid: string): void {
@@ -1033,7 +1124,7 @@ describe("GameEngine — showdown", () => {
 
   it("caller cannot act after calling showdown — not their turn", () => {
     // 3 players so the caller is bypassed in showdown turn order: alice → bob → charlie.
-    const e = new GameEngine(makeConfig({ playerIds: ["alice", "bob", "charlie"], seed: 42 }));
+    const e = startGame({ playerIds: ["alice", "bob", "charlie"], seed: 42 });
     const players = turnOrder(e);
 
     function playTurn(pid: string): void {
@@ -1132,7 +1223,7 @@ describe("GameEngine — event log & replay", () => {
   }
 
   it("replaying event log produces identical state", () => {
-    const e1 = new GameEngine(makeConfig({ seed: 123 }));
+    const e1 = startGame({ seed: 123 });
     runSomeTurns(e1);
 
     const log = e1.getEventLog();
@@ -1159,7 +1250,7 @@ describe("GameEngine — event log & replay", () => {
   });
 
   it("committed event sequence numbers are monotonic from zero", () => {
-    const e = new GameEngine(makeConfig({ seed: 42 }));
+    const e = startGame({ seed: 42 });
     const pid = turnOrder(e)[0];
     assert.ok(pid);
     e.processEvent(pid, "DRAW_CARD", { source: "deck" });
@@ -1186,14 +1277,14 @@ describe("GameEngine — event log & replay", () => {
 
   it("two engines in the same process have independent event id counters", () => {
     // Regression: prior code used a module-level eventIdCounter that
-    // leaked across engines. Each engine should start at evt-0.
+    // leaked across engines. Each engine's first event should be evt-0.
     const e1 = new GameEngine(makeConfig({ seed: 1 }));
     const e2 = new GameEngine(makeConfig({ seed: 2 }));
-    const pid1 = turnOrder(e1)[0];
-    const pid2 = turnOrder(e2)[0];
+    const pid1 = e1.getState().players[0]?.id;
+    const pid2 = e2.getState().players[0]?.id;
     assert.ok(pid1 && pid2);
-    const r1 = e1.processEvent(pid1, "DRAW_CARD", { source: "deck" });
-    const r2 = e2.processEvent(pid2, "DRAW_CARD", { source: "deck" });
+    const r1 = e1.processEvent(pid1, "ACKNOWLEDGE_REVEAL", undefined);
+    const r2 = e2.processEvent(pid2, "ACKNOWLEDGE_REVEAL", undefined);
     assert.equal(r1.events[0]?.id, "evt-0");
     assert.equal(r2.events[0]?.id, "evt-0");
   });
@@ -1201,7 +1292,7 @@ describe("GameEngine — event log & replay", () => {
   it("replayed engine's eventLog matches the source log byte-for-byte", () => {
     // fromEventLog must repopulate eventLog so getEventLog() round-trips
     // and continued play appends to that sequence (no restart from zero).
-    const e1 = new GameEngine(makeConfig({ seed: 123 }));
+    const e1 = startGame({ seed: 123 });
     runSomeTurns(e1);
     const log = e1.getEventLog();
 
@@ -1224,7 +1315,7 @@ describe("GameEngine — event log & replay", () => {
     // Drive a 3-player game all the way to finished, exercising the RNG-backed
     // shuffle power and lock markers along the way, then replay it and compare
     // deck, discard pile, hands (incl. lock state), and lockMarkers byte-for-byte.
-    const e1 = new GameEngine(makeConfig({ playerIds: ["alice", "bob", "charlie"], seed: 17 }));
+    const e1 = startGame({ playerIds: ["alice", "bob", "charlie"], seed: 17 });
     const players = turnOrder(e1);
 
     function fullTurn(engine: GameEngine, pid: string): void {
@@ -1327,7 +1418,7 @@ describe("GameEngine — event log & replay", () => {
 
 describe("GameEngine — visibility", () => {
   it("getVisibleState hides opponent cards during play", () => {
-    const e = new GameEngine(makeConfig());
+    const e = startGame();
     const vs = e.getVisibleState("alice");
 
     // There should be no myHand during in_progress
@@ -1340,7 +1431,7 @@ describe("GameEngine — visibility", () => {
   });
 
   it("discard pile is visible to all", () => {
-    const e = new GameEngine(makeConfig());
+    const e = startGame();
     const players = turnOrder(e);
     const pid = players[0];
     assert.ok(pid);
@@ -1353,7 +1444,7 @@ describe("GameEngine — visibility", () => {
   });
 
   it("mutating returned VisibleGameState does not affect engine internals", () => {
-    const e = new GameEngine(makeConfig());
+    const e = startGame();
     const pid = turnOrder(e)[0];
     assert.ok(pid);
     e.processEvent(pid, "DRAW_CARD", { source: "deck" });
@@ -1376,7 +1467,7 @@ describe("GameEngine — visibility", () => {
   });
 
   it("mutating processEvent's nextState does not affect engine internals", () => {
-    const e = new GameEngine(makeConfig());
+    const e = startGame();
     const pid = turnOrder(e)[0];
     assert.ok(pid);
     const r = e.processEvent(pid, "DRAW_CARD", { source: "deck" });
@@ -1394,7 +1485,7 @@ describe("GameEngine — visibility", () => {
   });
 
   it("mutating getEventLog return does not affect engine internals", () => {
-    const e = new GameEngine(makeConfig());
+    const e = startGame();
     const pid = turnOrder(e)[0];
     assert.ok(pid);
     e.processEvent(pid, "DRAW_CARD", { source: "deck" });
@@ -1409,7 +1500,7 @@ describe("GameEngine — visibility", () => {
   it("getVisibleState for an unknown playerId returns a valid state with no myHand", () => {
     // A spectator / non-player viewer should still see the public view but
     // never receive a private hand.
-    const e = new GameEngine(makeConfig());
+    const e = startGame();
     const vs = e.getVisibleState("ghost");
     assert.equal(vs.myHand, undefined);
     assert.equal(vs.players.length, e.getState().players.length);
@@ -1417,37 +1508,35 @@ describe("GameEngine — visibility", () => {
     assert.equal(vs.state, "in_progress");
   });
 
-  it("createGame transitions directly to in_progress (initial_reveal is unused)", () => {
-    // The GameState type allows "initial_reveal" but the engine currently never
-    // enters that state — it goes straight from setup to "in_progress". Pin
-    // this behavior so any future state-machine change is flagged.
+  it("getVisibleState reveals each player's own hand during initial_reveal", () => {
+    // Construction enters initial_reveal. Every player's view should
+    // include their own hand until they (and everyone else) acknowledge.
     const e = new GameEngine(makeConfig());
-    assert.equal(e.getState().state, "in_progress");
-    // Because state is in_progress, myHand is hidden even on the very first observation.
-    assert.equal(e.getVisibleState("alice").myHand, undefined);
+    assert.equal(e.getState().state, "initial_reveal");
+
+    for (const pid of ["alice", "bob", "charlie"]) {
+      const vs = e.getVisibleState(pid);
+      assert.ok(vs.myHand, `${pid}'s myHand must be populated during initial_reveal`);
+      assert.equal(vs.myHand.length, HAND_SIZE);
+      const actual = e.getState().players.find((p) => p.id === pid);
+      assert.ok(actual);
+      for (let i = 0; i < HAND_SIZE; i++) {
+        assert.equal(vs.myHand[i]?.index, i);
+        assert.equal(vs.myHand[i]?.card.card.id, actual.hand[i]?.card.id);
+      }
+    }
   });
 
-  it("getVisibleState reveals myHand when state is forced to initial_reveal", () => {
-    // The visibility branch for initial_reveal is dead code today, but covers a
-    // documented state in the spec. Force the state and confirm the branch works.
-    const e = new GameEngine(makeConfig());
-    e.getState().state = "initial_reveal";
-
-    const vs = e.getVisibleState("alice");
-    assert.ok(vs.myHand, "myHand must be populated when state is initial_reveal");
-    assert.equal(vs.myHand.length, HAND_SIZE);
-    const actual = e.getState().players.find((p) => p.id === "alice");
-    assert.ok(actual);
-    for (let i = 0; i < HAND_SIZE; i++) {
-      assert.equal(vs.myHand[i]?.index, i);
-      assert.equal(vs.myHand[i]?.card.card.id, actual.hand[i]?.card.id);
-    }
+  it("myHand becomes hidden once initial_reveal completes (state → in_progress)", () => {
+    const e = startGame();
+    assert.equal(e.getState().state, "in_progress");
+    assert.equal(e.getVisibleState("alice").myHand, undefined);
   });
 
   it("myHand stays hidden during state=showdown (after CALL_SHOWDOWN, before finished)", () => {
     // Reach the showdown state but stop before the final non-caller turn
     // completes. In this window, myHand must remain undefined.
-    const e = new GameEngine(makeConfig({ playerIds: ["alice", "bob"], seed: 42 }));
+    const e = startGame({ playerIds: ["alice", "bob"], seed: 42 });
 
     const resolveAnyPower = (pid: string): void => {
       if (!e.getValidEvents(pid).includes("USE_POWER")) return;
@@ -1499,7 +1588,7 @@ describe("GameEngine — visibility", () => {
   it("myHand is populated at finished state for every player", () => {
     // Reach finished: each player plays MIN_TURNS_BEFORE_SHOWDOWN turns,
     // then alice calls showdown and the remaining players take their final turn.
-    const e = new GameEngine(makeConfig({ playerIds: ["alice", "bob"], seed: 42 }));
+    const e = startGame({ playerIds: ["alice", "bob"], seed: 42 });
 
     const resolveAnyPower = (pid: string): void => {
       if (!e.getValidEvents(pid).includes("USE_POWER")) return;
@@ -1575,12 +1664,12 @@ describe("GameEngine — edge cases", () => {
   });
 
   it("END_TURN not valid in draw phase", () => {
-    const e = new GameEngine(makeConfig());
+    const e = startGame();
     assert.ok(!e.getValidEvents("alice").includes("END_TURN"));
   });
 
   it("rejects DISCARD_DRAWN / END_TURN / CALL_SHOWDOWN before DRAW", () => {
-    const e = new GameEngine(makeConfig());
+    const e = startGame();
     const pid = turnOrder(e)[0];
     assert.ok(pid);
 
@@ -1597,7 +1686,7 @@ describe("GameEngine — edge cases", () => {
   it("every action after finished returns 'Game is already finished'", () => {
     // Drive a 2-player game all the way to finished, then attempt each
     // action and confirm the early-return guard fires.
-    const e = new GameEngine(makeConfig({ playerIds: ["alice", "bob"], seed: 42 }));
+    const e = startGame({ playerIds: ["alice", "bob"], seed: 42 });
 
     const resolveAnyPower = (pid: string): void => {
       if (!e.getValidEvents(pid).includes("USE_POWER")) return;
@@ -1659,7 +1748,7 @@ describe("GameEngine — edge cases", () => {
   });
 
   it("USE_POWER not valid without pending power", () => {
-    const e = new GameEngine(makeConfig());
+    const e = startGame();
     const players = turnOrder(e);
     const p0 = players[0];
     assert.ok(p0);
@@ -1676,7 +1765,7 @@ describe("GameEngine — edge cases", () => {
 describe("GameEngine — Joker power", () => {
   function setupJoker(): { engine: GameEngine; playerId: string } {
     // Seed 2 for 3 players gives Alice a Joker on her first draw
-    const engine = new GameEngine(makeConfig({ seed: 2 }));
+    const engine = startGame({ seed: 2 });
     const players = turnOrder(engine);
     const playerId = players[0];
     assert.ok(playerId);
@@ -1937,7 +2026,7 @@ describe("GameEngine — winners", () => {
 
   /** Reaches finished state with player 0 as caller. */
   function playToFinished(playerIds: string[], seed: number): GameEngine {
-    const e = new GameEngine(makeConfig({ playerIds, seed }));
+    const e = startGame({ playerIds, seed });
     for (let i = 0; i < MIN_TURNS_BEFORE_SHOWDOWN; i++) {
       for (const pid of playerIds) playTurn(e, pid);
     }
@@ -1963,7 +2052,7 @@ describe("GameEngine — winners", () => {
   }
 
   it("returns empty array when game is not finished", () => {
-    const e = new GameEngine(makeConfig());
+    const e = startGame();
     assert.deepEqual(e.winners, []);
   });
 

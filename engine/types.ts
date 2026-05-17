@@ -57,6 +57,7 @@ export type TurnPhase = "draw" | "decision" | "power" | "showdown_eligible";
 
 /** Mapping of event types to their expected payload data. */
 export interface EventPayloadMap {
+  ACKNOWLEDGE_REVEAL: undefined;
   DRAW_CARD: { source: "deck" | "discard" };
   REPLACE_CARD: { handIndex: number };
   DISCARD_DRAWN: undefined;

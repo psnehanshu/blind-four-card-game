@@ -37,19 +37,22 @@ Locked cards use visible face-up King/Joker markers.
 
 ## 10 — Peek
 
-- view all own cards OR 1 opponent card privately
+- view all own cards, OR view 1 chosen opponent card privately
+- opponent peek target must be another player (not self)
+- opponent peek may target a locked card
 - no ownership/position changes
 - visibility unaffected for others
 
 ## Jack — Shuffle
 
-- shuffle target player's 4 card positions randomly
+- shuffle target player's **unlocked** card positions randomly
+- locked positions stay put
 - cards remain hidden
-- ownership/lock state preserved
+- ownership preserved
 
 ## Queen — Swap
 
-- swap 1 chosen card between 2 players
+- swap 1 chosen card between **2 different players**
 - swapped cards remain hidden
 - locked cards cannot swap
 
@@ -136,15 +139,27 @@ caller_total < every_other_player_total
 
 Tie against caller = caller loses, tied non-caller wins.
 
+If the caller is not in the lowest-score tie, every non-caller who ties at the lowest score wins.
+
+## Scoring
+
+- each card in hand counts its face value (see Deck table)
+- locked cards remain in the player's hand and count their face value
+- King and Joker lock markers sit face-up off the hand and do **not** count toward score
+
 ---
 
 # Visibility
 
-| Information             | Visible To |
-| ----------------------- | ---------- |
-| own cards during reveal | owner      |
-| own cards afterward     | hidden     |
-| opponent cards          | hidden     |
-| lock markers            | everyone   |
-| discard pile            | everyone   |
-| deck size               | everyone   |
+| Information                                  | Visible To  |
+| -------------------------------------------- | ----------- |
+| own cards during initial reveal              | owner       |
+| own cards during play (in_progress/showdown) | hidden      |
+| own cards at finished (final reveal)         | owner       |
+| opponent cards                               | hidden      |
+| drawn card during decision phase             | drawer only |
+| peek result                                  | peeker only |
+| lock markers                                 | everyone    |
+| discard pile (full contents)                 | everyone    |
+| deck contents                                | hidden      |
+| deck size                                    | everyone    |
