@@ -1215,6 +1215,35 @@ describe("GameEngine — visibility", () => {
     assert.ok(vs.discardPile.length > 0);
   });
 
+  it("createGame transitions directly to in_progress (initial_reveal is unused)", () => {
+    // The GameState type allows "initial_reveal" but the engine currently never
+    // enters that state — it goes straight from setup to "in_progress". Pin
+    // this behavior so any future state-machine change is flagged.
+    const e = new GameEngine(makeConfig());
+    e.createGame();
+    assert.equal(e.getState().state, "in_progress");
+    // Because state is in_progress, myHand is hidden even on the very first observation.
+    assert.equal(e.getVisibleState("alice").myHand, undefined);
+  });
+
+  it("getVisibleState reveals myHand when state is forced to initial_reveal", () => {
+    // The visibility branch for initial_reveal is dead code today, but covers a
+    // documented state in the spec. Force the state and confirm the branch works.
+    const e = new GameEngine(makeConfig());
+    e.createGame();
+    e.getState().state = "initial_reveal";
+
+    const vs = e.getVisibleState("alice");
+    assert.ok(vs.myHand, "myHand must be populated when state is initial_reveal");
+    assert.equal(vs.myHand.length, HAND_SIZE);
+    const actual = e.getState().players.find((p) => p.id === "alice");
+    assert.ok(actual);
+    for (let i = 0; i < HAND_SIZE; i++) {
+      assert.equal(vs.myHand[i]?.index, i);
+      assert.equal(vs.myHand[i]?.card.card.id, actual.hand[i]?.card.id);
+    }
+  });
+
   it("myHand is populated at finished state for every player", () => {
     // Reach finished: each player plays MIN_TURNS_BEFORE_SHOWDOWN turns,
     // then alice calls showdown and the remaining players take their final turn.
