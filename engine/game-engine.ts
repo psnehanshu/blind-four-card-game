@@ -1,5 +1,5 @@
 import type {
-  Card, Game, Player, PlayerCard, GameState, TurnPhase,
+  Card, Game, Player, PlayerCard, TurnPhase,
   ProposedEventType, CommittedEvent, EngineConfig,
   PowerAction, EngineResult, LockMarker, PeekResult,
   VisibleGameState, VisiblePlayerState, Rank,

@@ -1,7 +1,7 @@
 import { describe, it } from "node:test"
 import assert from "node:assert/strict"
 import { GameEngine } from "./game-engine.js"
-import type { EngineConfig } from "./types.js"
+import type { EngineConfig, PowerAction } from "./types.js"
 import { HAND_SIZE, MIN_TURNS_BEFORE_SHOWDOWN } from "./types.js"
 
 function makeConfig(overrides?: Partial<EngineConfig>): EngineConfig {
@@ -95,7 +95,7 @@ describe("GameEngine — turn flow", () => {
     if (engine.getValidEvents(playerId).includes("USE_POWER")) {
       // Try each possible power action until one succeeds
       const otherPlayers = turnOrder(engine).filter(p => p !== playerId)
-      const attempts: any[] = [
+      const attempts: PowerAction[] = [
         { power: "peek", target: "own" },
         { power: "shuffle", targetPlayerId: playerId },
         { power: "lock", targetPlayerId: playerId, cardIndex: 0 },
@@ -190,7 +190,7 @@ describe("GameEngine — turn flow", () => {
     if (!discR.error && discR.validEvents.includes("USE_POWER")) {
       engine2.processEvent(p2, "USE_POWER", {
         power: "lock", targetPlayerId: p2, cardIndex: 0,
-      } as any)
+      })
       engine2.processEvent(p2, "END_TURN")
 
       // Next player's turn, draw and try to replace the locked card
@@ -215,7 +215,6 @@ describe("GameEngine — turn flow", () => {
     const pid = turnOrder(e)[0]
     // First put a card in the discard pile
     e.processEvent(pid, "DRAW_CARD", { source: "deck" })
-    const discardState = e.getState()
     e.processEvent(pid, "DISCARD_DRAWN")
     e.processEvent(pid, "END_TURN")
 
@@ -237,7 +236,7 @@ describe("GameEngine — turn flow", () => {
       if (r.error) break
       e.processEvent(pid, "DISCARD_DRAWN")
       if (e.getValidEvents(pid).includes("USE_POWER")) {
-        e.processEvent(pid, "USE_POWER", { power: "peek", target: "own" } as any)
+        e.processEvent(pid, "USE_POWER", { power: "peek", target: "own" })
       }
       e.processEvent(pid, "END_TURN")
     }
@@ -270,7 +269,7 @@ describe("GameEngine — powers", () => {
       const peekR = e.processEvent(pid, "USE_POWER", {
         power: "peek",
         target: "own",
-      } as any)
+      } as PowerAction)
       assert.equal(peekR.error, undefined)
       assert.ok(peekR.peekResult)
       assert.equal(peekR.peekResult!.playerId, pid)
@@ -291,7 +290,7 @@ describe("GameEngine — powers", () => {
         power: "lock",
         targetPlayerId: pid,
         cardIndex: 0,
-      } as any)
+      } as PowerAction)
       assert.equal(lockR.error, undefined)
       assert.ok(e.getState().players[0].hand[0].locked)
     }
@@ -316,7 +315,7 @@ describe("GameEngine — powers", () => {
         sourceCardIndex: 0,
         targetPlayerId: pid2,
         targetCardIndex: 0,
-      } as any)
+      } as PowerAction)
       assert.equal(swapR.error, undefined)
 
       const newCardA = e.getState().players[0].hand[0]
@@ -340,7 +339,7 @@ describe("GameEngine — powers", () => {
       const shufR = e.processEvent(pid, "USE_POWER", {
         power: "shuffle",
         targetPlayerId: pid2,
-      } as any)
+      } as PowerAction)
       assert.equal(shufR.error, undefined)
 
       const newHand = e.getState().players[1].hand.map(pc => pc.card.id)
@@ -377,7 +376,7 @@ describe("GameEngine — showdown", () => {
       e.processEvent(pid, "DISCARD_DRAWN")
       if (e.getValidEvents(pid).includes("USE_POWER")) {
         const otherPlayers = turnOrder(e).filter(p => p !== pid)
-        const attempts: any[] = [
+        const attempts: PowerAction[] = [
           { power: "peek", target: "own" },
           { power: "shuffle", targetPlayerId: pid },
           { power: "lock", targetPlayerId: pid, cardIndex: 0 },
@@ -414,7 +413,7 @@ describe("GameEngine — showdown", () => {
     e.processEvent(pid, "DISCARD_DRAWN")
     if (e.getValidEvents(pid).includes("USE_POWER")) {
       const otherPlayers = turnOrder(e).filter(p => p !== pid)
-      const attempts: any[] = [
+      const attempts: PowerAction[] = [
         { power: "peek", target: "own" },
         { power: "shuffle", targetPlayerId: pid },
         { power: "lock", targetPlayerId: pid, cardIndex: 0 },
@@ -460,7 +459,7 @@ describe("GameEngine — event log & replay", () => {
     engine.processEvent(pid, "DRAW_CARD", { source: "deck" })
     engine.processEvent(pid, "DISCARD_DRAWN")
     if (engine.getValidEvents(pid).includes("USE_POWER")) {
-      const attempts: any[] = [
+      const attempts: PowerAction[] = [
         { power: "peek", target: "own" },
         { power: "shuffle", targetPlayerId: pid },
         { power: "lock", targetPlayerId: pid, cardIndex: 0 },
@@ -548,7 +547,7 @@ describe("GameEngine — edge cases", () => {
   it("USE_POWER not valid without pending power", () => {
     const e = new GameEngine(makeConfig())
     e.createGame()
-    const r = e.processEvent(turnOrder(e)[0], "USE_POWER", { power: "peek", target: "own" } as any)
+    const r = e.processEvent(turnOrder(e)[0], "USE_POWER", { power: "peek", target: "own" } as PowerAction)
     assert.ok(r.error)
   })
 })

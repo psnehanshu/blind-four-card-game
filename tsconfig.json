@@ -4,6 +4,8 @@
     "moduleResolution": "NodeNext",
     "target": "ES2022",
     "strict": true,
+    "noImplicitAny": true,
+    "noImplicitReturns": true,
     "types": ["node"],
     "noEmit": true
   },
