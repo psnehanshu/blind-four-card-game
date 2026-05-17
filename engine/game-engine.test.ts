@@ -909,6 +909,78 @@ describe("GameEngine — showdown", () => {
 
     assert.equal(e.getState().state, "finished");
   });
+
+  it("caller cannot act after calling showdown — not their turn", () => {
+    // 3 players so the caller is bypassed in showdown turn order: alice → bob → charlie.
+    const e = new GameEngine(makeConfig({ playerIds: ["alice", "bob", "charlie"], seed: 42 }));
+    e.createGame();
+    const players = turnOrder(e);
+
+    function playTurn(pid: string): void {
+      e.processEvent(pid, "DRAW_CARD", { source: "deck" });
+      e.processEvent(pid, "DISCARD_DRAWN", undefined);
+      if (e.getValidEvents(pid).includes("USE_POWER")) {
+        const others = players.filter((p) => p !== pid);
+        const firstOther = others[0];
+        const attempts: PowerAction[] = [
+          { power: "peek", target: "own" },
+          { power: "shuffle", targetPlayerId: pid },
+          { power: "lock", targetPlayerId: pid, cardIndex: 0 },
+          { power: "joker", mimicRank: "10", action: { power: "peek", target: "own" } },
+        ];
+        if (firstOther) {
+          attempts.push({
+            power: "swap",
+            sourcePlayerId: pid,
+            sourceCardIndex: 0,
+            targetPlayerId: firstOther,
+            targetCardIndex: 0,
+          });
+        }
+        for (const a of attempts) {
+          if (!e.processEvent(pid, "USE_POWER", a).error) break;
+        }
+      }
+      e.processEvent(pid, "END_TURN", undefined);
+    }
+
+    for (let i = 0; i < MIN_TURNS_BEFORE_SHOWDOWN; i++) {
+      for (const pid of players) playTurn(pid);
+    }
+
+    // Alice's calling turn.
+    e.processEvent("alice", "DRAW_CARD", { source: "deck" });
+    e.processEvent("alice", "DISCARD_DRAWN", undefined);
+    if (e.getValidEvents("alice").includes("USE_POWER")) {
+      const attempts: PowerAction[] = [
+        { power: "peek", target: "own" },
+        { power: "shuffle", targetPlayerId: "alice" },
+        { power: "lock", targetPlayerId: "alice", cardIndex: 0 },
+        { power: "joker", mimicRank: "10", action: { power: "peek", target: "own" } },
+        { power: "swap", sourcePlayerId: "alice", sourceCardIndex: 0, targetPlayerId: "bob", targetCardIndex: 0 },
+      ];
+      for (const a of attempts) {
+        if (!e.processEvent("alice", "USE_POWER", a).error) break;
+      }
+    }
+    assert.equal(e.processEvent("alice", "CALL_SHOWDOWN", undefined).error, undefined);
+    assert.equal(e.getState().state, "showdown");
+
+    // The caller is no longer the current turn — every action attempt fails with "Not your turn".
+    const draw = e.processEvent("alice", "DRAW_CARD", { source: "deck" });
+    assert.match(draw.error ?? "", /Not your turn/);
+    const endR = e.processEvent("alice", "END_TURN", undefined);
+    assert.match(endR.error ?? "", /Not your turn/);
+    const callAgain = e.processEvent("alice", "CALL_SHOWDOWN", undefined);
+    assert.match(callAgain.error ?? "", /Not your turn/);
+
+    // Force currentTurn back to the caller to exercise the "Caller gets no more turns" guard directly.
+    const state = e.getState();
+    const callerIdx = state.players.findIndex((p) => p.id === "alice");
+    state.currentTurn = callerIdx;
+    const forcedEnd = e.processEvent("alice", "END_TURN", undefined);
+    assert.match(forcedEnd.error ?? "", /Caller gets no more turns|Cannot end turn now/);
+  });
 });
 
 // ───────────────────────────────  Event Log / Replay  ───────────────────────────────
