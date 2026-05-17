@@ -33,20 +33,20 @@ const POWER_ACTION_MAP: Record<string, string> = {
 export class GameEngine {
   private config: EngineConfig;
   private game: Game;
-  private eventLog: CommittedEvent[];
+  private eventLog: CommittedEvent[] = [];
   private rng: SeededRNG;
-  private eventIdCounter: number;
+  private eventIdCounter = 0;
 
   // Internal turn-phase tracking
-  private phase: TurnPhase;
-  private drawnCard: Card | null;
-  private totalTurnsTaken: number;
-  private playerTurnCount: Map<string, number>;
-  private pendingPowerRank: Rank | null;
-  private lockMarkers: LockMarker[];
-  private playersCompletedFinalTurn: Set<string>;
-  private lastPeekResult: PeekResult | null;
-  private playersAcknowledgedReveal: Set<string>;
+  private phase: TurnPhase = "draw";
+  private drawnCard: Card | null = null;
+  private totalTurnsTaken = 0;
+  private playerTurnCount = new Map<string, number>();
+  private pendingPowerRank: Rank | null = null;
+  private lockMarkers: LockMarker[] = [];
+  private playersCompletedFinalTurn = new Set<string>();
+  private lastPeekResult: PeekResult | null = null;
+  private playersAcknowledgedReveal = new Set<string>();
 
   /**
    * Constructs a fully-initialized GameEngine: validates the config,
@@ -62,17 +62,6 @@ export class GameEngine {
     }
     this.config = { ...config };
     this.rng = new SeededRNG(config.seed ?? Date.now());
-    this.eventLog = [];
-    this.eventIdCounter = 0;
-    this.phase = "draw";
-    this.drawnCard = null;
-    this.totalTurnsTaken = 0;
-    this.playerTurnCount = new Map();
-    this.pendingPowerRank = null;
-    this.lockMarkers = [];
-    this.playersCompletedFinalTurn = new Set();
-    this.lastPeekResult = null;
-    this.playersAcknowledgedReveal = new Set();
     this.game = this.buildInitialGame();
   }
 
