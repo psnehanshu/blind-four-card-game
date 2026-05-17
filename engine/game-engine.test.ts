@@ -1079,6 +1079,109 @@ describe("GameEngine — event log & replay", () => {
       }
     }
   });
+
+  it("replaying a full game (through shuffle, lock, and showdown) reproduces every observable", () => {
+    // Drive a 3-player game all the way to finished, exercising the RNG-backed
+    // shuffle power and lock markers along the way, then replay it and compare
+    // deck, discard pile, hands (incl. lock state), and lockMarkers byte-for-byte.
+    const e1 = new GameEngine(makeConfig({ playerIds: ["alice", "bob", "charlie"], seed: 17 }));
+    e1.createGame();
+    const players = turnOrder(e1);
+
+    function fullTurn(engine: GameEngine, pid: string): void {
+      engine.processEvent(pid, "DRAW_CARD", { source: "deck" });
+      engine.processEvent(pid, "DISCARD_DRAWN", undefined);
+      if (engine.getValidEvents(pid).includes("USE_POWER")) {
+        const others = players.filter((p) => p !== pid);
+        const firstOther = others[0];
+        const attempts: PowerAction[] = [
+          { power: "peek", target: "own" },
+          { power: "shuffle", targetPlayerId: pid },
+          { power: "lock", targetPlayerId: pid, cardIndex: 0 },
+          { power: "joker", mimicRank: "10", action: { power: "peek", target: "own" } },
+        ];
+        if (firstOther) {
+          attempts.push({
+            power: "swap",
+            sourcePlayerId: pid,
+            sourceCardIndex: 0,
+            targetPlayerId: firstOther,
+            targetCardIndex: 0,
+          });
+        }
+        for (const a of attempts) {
+          if (!engine.processEvent(pid, "USE_POWER", a).error) break;
+        }
+      }
+      engine.processEvent(pid, "END_TURN", undefined);
+    }
+
+    for (let i = 0; i < MIN_TURNS_BEFORE_SHOWDOWN; i++) {
+      for (const pid of players) fullTurn(e1, pid);
+    }
+    // Caller turn + call showdown.
+    e1.processEvent("alice", "DRAW_CARD", { source: "deck" });
+    e1.processEvent("alice", "DISCARD_DRAWN", undefined);
+    if (e1.getValidEvents("alice").includes("USE_POWER")) {
+      const attempts: PowerAction[] = [
+        { power: "peek", target: "own" },
+        { power: "shuffle", targetPlayerId: "alice" },
+        { power: "lock", targetPlayerId: "alice", cardIndex: 0 },
+        { power: "joker", mimicRank: "10", action: { power: "peek", target: "own" } },
+        { power: "swap", sourcePlayerId: "alice", sourceCardIndex: 0, targetPlayerId: "bob", targetCardIndex: 0 },
+      ];
+      for (const a of attempts) {
+        if (!e1.processEvent("alice", "USE_POWER", a).error) break;
+      }
+    }
+    e1.processEvent("alice", "CALL_SHOWDOWN", undefined);
+    for (const pid of players.slice(1)) fullTurn(e1, pid);
+    assert.equal(e1.getState().state, "finished");
+
+    const log = e1.getEventLog();
+    assert.ok(log.length > 10, `replay test should exercise many events, got ${log.length}`);
+
+    const e2 = GameEngine.fromEventLog(log, makeConfig({ playerIds: ["alice", "bob", "charlie"], seed: 17 }));
+    const s1 = e1.getState();
+    const s2 = e2.getState();
+
+    assert.equal(s1.state, s2.state);
+    assert.equal(s1.currentTurn, s2.currentTurn);
+    assert.equal(s1.callerId, s2.callerId);
+    assert.deepEqual(
+      s1.deck.map((c) => c.id),
+      s2.deck.map((c) => c.id),
+      "deck order must match after replay",
+    );
+    assert.deepEqual(
+      s1.discardPile.map((c) => c.id),
+      s2.discardPile.map((c) => c.id),
+      "discard pile must match after replay",
+    );
+
+    for (let i = 0; i < s1.players.length; i++) {
+      const p1 = s1.players[i];
+      const p2 = s2.players[i];
+      assert.ok(p1 && p2);
+      assert.equal(p1.id, p2.id);
+      for (let j = 0; j < HAND_SIZE; j++) {
+        const h1: PlayerCard | undefined = p1.hand[j];
+        const h2: PlayerCard | undefined = p2.hand[j];
+        assert.ok(h1 && h2);
+        assert.equal(h1.card.id, h2.card.id, `player ${i} hand[${j}] card id mismatch`);
+        assert.equal(h1.locked, h2.locked, `player ${i} hand[${j}] lock state mismatch`);
+      }
+    }
+
+    // Lock markers must also round-trip via the visible state.
+    const vs1 = e1.getVisibleState("alice");
+    const vs2 = e2.getVisibleState("alice");
+    assert.deepEqual(
+      vs1.lockMarkers.map((m) => ({ playerId: m.playerId, cardIndex: m.cardIndex, markerId: m.markerCard.id })),
+      vs2.lockMarkers.map((m) => ({ playerId: m.playerId, cardIndex: m.cardIndex, markerId: m.markerCard.id })),
+      "lockMarkers must match after replay",
+    );
+  });
 });
 
 // ───────────────────────────────  Visibility  ───────────────────────────────
