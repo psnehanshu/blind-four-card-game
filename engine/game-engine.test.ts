@@ -315,6 +315,62 @@ describe("GameEngine — turn flow", () => {
     assert.match(badPower.error ?? "", /No power to resolve|No pending power/);
   });
 
+  it("DRAW_CARD from discard does NOT activate the drawn power card", () => {
+    // 2-player seed 0: alice's hand[2] is a Q. Replace it onto the discard
+    // so the top of discard is a Q, then bob draws from discard.
+    const e = new GameEngine(makeConfig({ playerIds: ["alice", "bob"], seed: 0 }));
+    e.createGame();
+    assert.equal(e.getState().players[0]?.hand[2]?.card.rank, "Q", "test seed must place Q at alice's hand[2]");
+
+    e.processEvent("alice", "DRAW_CARD", { source: "deck" });
+    e.processEvent("alice", "REPLACE_CARD", { handIndex: 2 });
+    e.processEvent("alice", "USE_POWER", {
+      power: "swap",
+      sourcePlayerId: "alice",
+      sourceCardIndex: 0,
+      targetPlayerId: "bob",
+      targetCardIndex: 0,
+    });
+    e.processEvent("alice", "END_TURN", undefined);
+    assert.equal(e.getState().discardPile.at(-1)?.rank, "Q", "discard top must be Q before bob draws");
+
+    const drawR = e.processEvent("bob", "DRAW_CARD", { source: "discard" });
+    assert.equal(drawR.error, undefined);
+    assert.ok(!drawR.validEvents.includes("USE_POWER"), "drawing a power card from discard must not trigger USE_POWER");
+    assert.deepEqual(drawR.validEvents.sort(), ["DISCARD_DRAWN", "REPLACE_CARD"].sort());
+  });
+
+  it("DISCARD_DRAWN of a discard-drawn power card activates the power", () => {
+    // Same setup as the prior test, but bob discards the drawn Q — that
+    // future discard should activate the swap power.
+    const e = new GameEngine(makeConfig({ playerIds: ["alice", "bob"], seed: 0 }));
+    e.createGame();
+    e.processEvent("alice", "DRAW_CARD", { source: "deck" });
+    e.processEvent("alice", "REPLACE_CARD", { handIndex: 2 });
+    e.processEvent("alice", "USE_POWER", {
+      power: "swap",
+      sourcePlayerId: "alice",
+      sourceCardIndex: 0,
+      targetPlayerId: "bob",
+      targetCardIndex: 0,
+    });
+    e.processEvent("alice", "END_TURN", undefined);
+
+    e.processEvent("bob", "DRAW_CARD", { source: "discard" });
+    const discR = e.processEvent("bob", "DISCARD_DRAWN", undefined);
+    assert.equal(discR.error, undefined);
+    assert.ok(discR.validEvents.includes("USE_POWER"), "DISCARD_DRAWN of the Q must trigger USE_POWER");
+
+    const swapR = e.processEvent("bob", "USE_POWER", {
+      power: "swap",
+      sourcePlayerId: "bob",
+      sourceCardIndex: 1,
+      targetPlayerId: "alice",
+      targetCardIndex: 1,
+    });
+    assert.equal(swapR.error, undefined);
+  });
+
   it("REPLACE_CARD activates the discarded hand card's power", () => {
     // 2-player seed 0: top draw is 8 (non-power); alice's hand[2] is a Q.
     // Replacing hand[2] should put the Q on the discard pile AND trigger USE_POWER.
@@ -1259,6 +1315,18 @@ describe("GameEngine — visibility", () => {
     assert.ok(vs.discardPile.length > 0);
   });
 
+  it("getVisibleState for an unknown playerId returns a valid state with no myHand", () => {
+    // A spectator / non-player viewer should still see the public view but
+    // never receive a private hand.
+    const e = new GameEngine(makeConfig());
+    e.createGame();
+    const vs = e.getVisibleState("ghost");
+    assert.equal(vs.myHand, undefined);
+    assert.equal(vs.players.length, e.getState().players.length);
+    assert.equal(vs.deckSize, e.getState().deck.length);
+    assert.equal(vs.state, "in_progress");
+  });
+
   it("createGame transitions directly to in_progress (initial_reveal is unused)", () => {
     // The GameState type allows "initial_reveal" but the engine currently never
     // enters that state — it goes straight from setup to "in_progress". Pin
@@ -1372,6 +1440,87 @@ describe("GameEngine — edge cases", () => {
     const e = new GameEngine(makeConfig());
     e.createGame();
     assert.ok(!e.getValidEvents("alice").includes("END_TURN"));
+  });
+
+  it("rejects DISCARD_DRAWN / END_TURN / CALL_SHOWDOWN before DRAW", () => {
+    const e = new GameEngine(makeConfig());
+    e.createGame();
+    const pid = turnOrder(e)[0];
+    assert.ok(pid);
+
+    const discR = e.processEvent(pid, "DISCARD_DRAWN", undefined);
+    assert.match(discR.error ?? "", /Must replace or discard drawn card/);
+
+    const endR = e.processEvent(pid, "END_TURN", undefined);
+    assert.match(endR.error ?? "", /Cannot end turn now/);
+
+    const callR = e.processEvent(pid, "CALL_SHOWDOWN", undefined);
+    assert.match(callR.error ?? "", /Cannot call showdown now/);
+  });
+
+  it("every action after finished returns 'Game is already finished'", () => {
+    // Drive a 2-player game all the way to finished, then attempt each
+    // action and confirm the early-return guard fires.
+    const e = new GameEngine(makeConfig({ playerIds: ["alice", "bob"], seed: 42 }));
+    e.createGame();
+
+    const resolveAnyPower = (pid: string): void => {
+      if (!e.getValidEvents(pid).includes("USE_POWER")) return;
+      const others = turnOrder(e).filter((p) => p !== pid);
+      const firstOther = others[0];
+      const attempts: PowerAction[] = [
+        { power: "peek", target: "own" },
+        { power: "shuffle", targetPlayerId: pid },
+        { power: "lock", targetPlayerId: pid, cardIndex: 0 },
+        { power: "joker", mimicRank: "10", action: { power: "peek", target: "own" } },
+      ];
+      if (firstOther) {
+        attempts.push({
+          power: "swap",
+          sourcePlayerId: pid,
+          sourceCardIndex: 0,
+          targetPlayerId: firstOther,
+          targetCardIndex: 0,
+        });
+      }
+      for (const a of attempts) {
+        if (!e.processEvent(pid, "USE_POWER", a).error) return;
+      }
+      throw new Error(`no power attempt succeeded for ${pid}`);
+    };
+
+    const runTurn = (pid: string): void => {
+      e.processEvent(pid, "DRAW_CARD", { source: "deck" });
+      e.processEvent(pid, "DISCARD_DRAWN", undefined);
+      resolveAnyPower(pid);
+      e.processEvent(pid, "END_TURN", undefined);
+    };
+
+    for (let i = 0; i < MIN_TURNS_BEFORE_SHOWDOWN; i++) {
+      runTurn("alice");
+      runTurn("bob");
+    }
+    e.processEvent("alice", "DRAW_CARD", { source: "deck" });
+    e.processEvent("alice", "DISCARD_DRAWN", undefined);
+    resolveAnyPower("alice");
+    e.processEvent("alice", "CALL_SHOWDOWN", undefined);
+    runTurn("bob");
+    assert.equal(e.getState().state, "finished");
+
+    const cases: { event: () => ReturnType<GameEngine["processEvent"]>; label: string }[] = [
+      { event: () => e.processEvent("alice", "DRAW_CARD", { source: "deck" }), label: "DRAW_CARD" },
+      { event: () => e.processEvent("alice", "DISCARD_DRAWN", undefined), label: "DISCARD_DRAWN" },
+      { event: () => e.processEvent("alice", "REPLACE_CARD", { handIndex: 0 }), label: "REPLACE_CARD" },
+      { event: () => e.processEvent("alice", "END_TURN", undefined), label: "END_TURN" },
+      { event: () => e.processEvent("alice", "CALL_SHOWDOWN", undefined), label: "CALL_SHOWDOWN" },
+      {
+        event: () => e.processEvent("alice", "USE_POWER", { power: "peek", target: "own" }),
+        label: "USE_POWER",
+      },
+    ];
+    for (const { event, label } of cases) {
+      assert.match(event().error ?? "", /Game is already finished/, `${label} must be blocked after finished`);
+    }
   });
 
   it("USE_POWER not valid without pending power", () => {
@@ -1516,6 +1665,47 @@ describe("GameEngine — Joker power", () => {
     assert.ok(
       !engine.getState().discardPile.some((c) => c.id === marker0.markerCard.id),
       "Joker mimic-K marker must not be in the discard pile after lock is applied",
+    );
+  });
+
+  it("Mimic Lock — locks an opponent's card and places the marker on them", () => {
+    const { engine, playerId } = setupJoker();
+    const players = turnOrder(engine);
+    const targetId = players[1];
+    assert.ok(targetId);
+    const targetBefore = engine.getState().players.find((p) => p.id === targetId);
+    assert.ok(targetBefore);
+    const targetCardId = targetBefore.hand[2]?.card.id;
+    assert.ok(targetCardId);
+
+    const result = engine.processEvent(playerId, "USE_POWER", {
+      power: "joker",
+      mimicRank: "K",
+      action: {
+        power: "lock",
+        targetPlayerId: targetId,
+        cardIndex: 2,
+      },
+    });
+    assert.equal(result.error, undefined);
+
+    const targetAfter = engine.getState().players.find((p) => p.id === targetId);
+    assert.ok(targetAfter);
+    const lockedCard = targetAfter.hand[2];
+    assert.ok(lockedCard);
+    assert.equal(lockedCard.locked, true, "target's chosen card must be locked");
+    assert.equal(lockedCard.card.id, targetCardId, "locking must not change the underlying card");
+
+    const visible = engine.getVisibleState(playerId);
+    const targetMarkers = visible.lockMarkers.filter((lm) => lm.playerId === targetId);
+    assert.equal(targetMarkers.length, 1);
+    const marker = targetMarkers[0];
+    assert.ok(marker);
+    assert.equal(marker.cardIndex, 2);
+    assert.equal(marker.markerCard.rank, "JOKER");
+    assert.ok(
+      !engine.getState().discardPile.some((c) => c.id === marker.markerCard.id),
+      "Joker marker must be removed from discard once placed on the target",
     );
   });
 
