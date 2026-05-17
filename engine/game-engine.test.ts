@@ -204,48 +204,34 @@ describe("GameEngine — turn flow", () => {
   });
 
   it("rejects replace of locked card", () => {
-    const e = setup();
-    const players = turnOrder(e);
-    const pid = players[0];
-    assert.ok(pid);
-    e.processEvent(pid, "DRAW_CARD", { source: "deck" });
+    // 2-player seed 7 yields draws K → 7 → 8: alice locks K, bob discards a non-power 7,
+    // then alice's next draw (8) lets her try to replace her locked card directly.
+    const e = new GameEngine(makeConfig({ playerIds: ["alice", "bob"], seed: 7 }));
+    e.createGame();
+    assert.equal(e.getState().deck.at(-1)?.rank, "K", "test seed must produce K on first draw");
 
-    // Lock a card first — draw a King from deck, discard it, use power to lock
-    // But we don't know if we drew a King. Let's instead find a King.
-    // For simplicity, just verify via a helper: shuffle to known state.
-    const engine2 = new GameEngine(makeConfig({ seed: 999 }));
-    engine2.createGame();
-    const players2 = turnOrder(engine2);
-    const p2 = players2[0];
-    assert.ok(p2);
+    // Alice draws K, discards, locks her own card 0
+    e.processEvent("alice", "DRAW_CARD", { source: "deck" });
+    const discR = e.processEvent("alice", "DISCARD_DRAWN", undefined);
+    assert.ok(discR.validEvents.includes("USE_POWER"), "discarding a K must trigger USE_POWER phase");
+    const lockR = e.processEvent("alice", "USE_POWER", {
+      power: "lock",
+      targetPlayerId: "alice",
+      cardIndex: 0,
+    });
+    assert.equal(lockR.error, undefined);
+    e.processEvent("alice", "END_TURN", undefined);
 
-    // We might not get a King. Let's still try: draw, discard, if power, use it to lock card 0
-    engine2.processEvent(p2, "DRAW_CARD", { source: "deck" });
-    const discR = engine2.processEvent(p2, "DISCARD_DRAWN", undefined);
-    if (!discR.error && discR.validEvents.includes("USE_POWER")) {
-      engine2.processEvent(p2, "USE_POWER", {
-        power: "lock",
-        targetPlayerId: p2,
-        cardIndex: 0,
-      });
-      engine2.processEvent(p2, "END_TURN", undefined);
+    // Bob's turn — non-power discard, cleanly advances back to alice
+    e.processEvent("bob", "DRAW_CARD", { source: "deck" });
+    const bobDiscR = e.processEvent("bob", "DISCARD_DRAWN", undefined);
+    assert.ok(!bobDiscR.validEvents.includes("USE_POWER"), "bob's draw should be a non-power card");
+    e.processEvent("bob", "END_TURN", undefined);
 
-      // Next player's turn, draw and try to replace the locked card
-      const p3 = players2[1];
-      assert.ok(p3);
-      engine2.processEvent(p3, "DRAW_CARD", { source: "deck" });
-      // Can't replace a locked card on another player's hand,
-      // but can we even target it? The spec says locked cards can't be replaced.
-      // REPLACE only replaces from your own hand. So this test is moot for
-      // another player. Let's verify on the lock owner's next turn.
-      engine2.processEvent(p3, "DISCARD_DRAWN", undefined);
-      engine2.processEvent(p3, "END_TURN", undefined);
-
-      // Now back to p2, draw, try to replace locked card index 0
-      engine2.processEvent(p2, "DRAW_CARD", { source: "deck" });
-      const repR = engine2.processEvent(p2, "REPLACE_CARD", { handIndex: 0 });
-      assert.ok(repR.error);
-    }
+    // Alice draws again and attempts to replace her locked card 0.
+    // The engine throws from applyReplace (no validation upfront) — capture that.
+    e.processEvent("alice", "DRAW_CARD", { source: "deck" });
+    assert.throws(() => e.processEvent("alice", "REPLACE_CARD", { handIndex: 0 }), /Cannot replace a locked card/);
   });
 
   it("discard drawn from discard pile works", () => {
@@ -310,123 +296,215 @@ describe("GameEngine — turn flow", () => {
 
 describe("GameEngine — powers", () => {
   it("Peek (10) — can peek own cards and returns info", () => {
-    const e = new GameEngine(makeConfig({ seed: 42 }));
+    // seed 17 (3 players) deterministically yields a 10 as the first deck draw
+    const e = new GameEngine(makeConfig({ seed: 17 }));
     e.createGame();
     const players = turnOrder(e);
     const pid = players[0];
     assert.ok(pid);
 
-    // Draw and discard until we discard a power card (10)
-    // Check if we get a power phase
+    assert.equal(e.getState().deck.at(-1)?.rank, "10", "test seed must produce 10 on first draw");
+
     e.processEvent(pid, "DRAW_CARD", { source: "deck" });
     const discR = e.processEvent(pid, "DISCARD_DRAWN", undefined);
+    assert.ok(discR.validEvents.includes("USE_POWER"), "discarding a 10 must trigger USE_POWER phase");
 
-    if (discR.validEvents.includes("USE_POWER")) {
-      const peekR = e.processEvent(pid, "USE_POWER", {
-        power: "peek",
-        target: "own",
-      });
-      assert.equal(peekR.error, undefined);
-      const { peekResult } = peekR;
-      assert.ok(peekResult);
-      assert.equal(peekResult.playerId, pid);
-      assert.equal(peekResult.cards.length, HAND_SIZE);
-    }
+    const peekR = e.processEvent(pid, "USE_POWER", {
+      power: "peek",
+      target: "own",
+    });
+    assert.equal(peekR.error, undefined);
+    const { peekResult } = peekR;
+    assert.ok(peekResult);
+    assert.equal(peekResult.playerId, pid);
+    assert.equal(peekResult.cards.length, HAND_SIZE);
   });
 
   it("Lock (K) — locks a card and creates a marker", () => {
+    // seed 999 (3 players) deterministically yields a K as the first deck draw
     const e = new GameEngine(makeConfig({ seed: 999 }));
     e.createGame();
     const players = turnOrder(e);
     const pid = players[0];
     assert.ok(pid);
 
+    assert.equal(e.getState().deck.at(-1)?.rank, "K", "test seed must produce K on first draw");
+
     e.processEvent(pid, "DRAW_CARD", { source: "deck" });
     const discR = e.processEvent(pid, "DISCARD_DRAWN", undefined);
+    assert.ok(discR.validEvents.includes("USE_POWER"), "discarding a K must trigger USE_POWER phase");
 
-    if (discR.validEvents.includes("USE_POWER")) {
-      const lockR = e.processEvent(pid, "USE_POWER", {
-        power: "lock",
-        targetPlayerId: pid,
-        cardIndex: 0,
-      });
-      assert.equal(lockR.error, undefined);
-      const p0 = e.getState().players[0];
-      assert.ok(p0);
-      const c0 = p0.hand[0];
-      assert.ok(c0);
-      assert.ok(c0.locked);
-    }
+    const lockR = e.processEvent(pid, "USE_POWER", {
+      power: "lock",
+      targetPlayerId: pid,
+      cardIndex: 0,
+    });
+    assert.equal(lockR.error, undefined);
+    const p0 = e.getState().players[0];
+    assert.ok(p0);
+    const c0 = p0.hand[0];
+    assert.ok(c0);
+    assert.ok(c0.locked);
   });
 
   it("Swap (Q) — swaps cards between players", () => {
-    const e = new GameEngine(makeConfig({ seed: 777 }));
+    // seed 9 (3 players) deterministically yields a Q as the first deck draw
+    const e = new GameEngine(makeConfig({ seed: 9 }));
     e.createGame();
     const players = turnOrder(e);
     const pid = players[0];
     const pid2 = players[1];
     assert.ok(pid && pid2);
+
+    assert.equal(e.getState().deck.at(-1)?.rank, "Q", "test seed must produce Q on first draw");
 
     e.processEvent(pid, "DRAW_CARD", { source: "deck" });
     const discR = e.processEvent(pid, "DISCARD_DRAWN", undefined);
+    assert.ok(discR.validEvents.includes("USE_POWER"), "discarding a Q must trigger USE_POWER phase");
 
-    if (discR.validEvents.includes("USE_POWER")) {
-      const p0 = e.getState().players[0];
-      const p1 = e.getState().players[1];
-      assert.ok(p0 && p1);
-      const cardA = p0.hand[0];
-      const cardB = p1.hand[0];
-      assert.ok(cardA && cardB);
-      const idA = cardA.card.id;
-      const idB = cardB.card.id;
+    const p0 = e.getState().players[0];
+    const p1 = e.getState().players[1];
+    assert.ok(p0 && p1);
+    const cardA = p0.hand[0];
+    const cardB = p1.hand[0];
+    assert.ok(cardA && cardB);
+    const idA = cardA.card.id;
+    const idB = cardB.card.id;
 
-      const swapR = e.processEvent(pid, "USE_POWER", {
-        power: "swap",
-        sourcePlayerId: pid,
-        sourceCardIndex: 0,
-        targetPlayerId: pid2,
-        targetCardIndex: 0,
-      });
-      assert.equal(swapR.error, undefined);
+    const swapR = e.processEvent(pid, "USE_POWER", {
+      power: "swap",
+      sourcePlayerId: pid,
+      sourceCardIndex: 0,
+      targetPlayerId: pid2,
+      targetCardIndex: 0,
+    });
+    assert.equal(swapR.error, undefined);
 
-      const p0after = e.getState().players[0];
-      const p1after = e.getState().players[1];
-      assert.ok(p0after && p1after);
-      const newCardA = p0after.hand[0];
-      const newCardB = p1after.hand[0];
-      assert.ok(newCardA && newCardB);
-      assert.equal(newCardA.card.id, idB);
-      assert.equal(newCardB.card.id, idA);
-    }
+    const p0after = e.getState().players[0];
+    const p1after = e.getState().players[1];
+    assert.ok(p0after && p1after);
+    const newCardA = p0after.hand[0];
+    const newCardB = p1after.hand[0];
+    assert.ok(newCardA && newCardB);
+    assert.equal(newCardA.card.id, idB);
+    assert.equal(newCardB.card.id, idA);
+  });
+
+  it("Swap (Q) — rejects swap involving a locked card", () => {
+    // 2-player seed 26 yields draw sequence K → 7 → Q for alice/bob/alice:
+    //   - alice turn 1 draws K → locks her card 0
+    //   - bob turn 1 draws 7 → harmless discard
+    //   - alice turn 2 draws Q → attempts swap of her locked card
+    const e = new GameEngine(makeConfig({ playerIds: ["alice", "bob"], seed: 26 }));
+    e.createGame();
+    const deck = e.getState().deck;
+    assert.equal(deck.at(-1)?.rank, "K", "test seed must produce K on alice's first draw");
+    assert.equal(deck.at(-3)?.rank, "Q", "test seed must produce Q on alice's second draw");
+
+    // Alice locks her own card 0 via K
+    e.processEvent("alice", "DRAW_CARD", { source: "deck" });
+    e.processEvent("alice", "DISCARD_DRAWN", undefined);
+    e.processEvent("alice", "USE_POWER", { power: "lock", targetPlayerId: "alice", cardIndex: 0 });
+    e.processEvent("alice", "END_TURN", undefined);
+
+    // Bob plays a harmless turn
+    e.processEvent("bob", "DRAW_CARD", { source: "deck" });
+    e.processEvent("bob", "DISCARD_DRAWN", undefined);
+    e.processEvent("bob", "END_TURN", undefined);
+
+    // Capture pre-swap hands to verify nothing moved
+    const aliceHandBefore = e.getState().players[0]?.hand.map((pc) => pc.card.id);
+    const bobHandBefore = e.getState().players[1]?.hand.map((pc) => pc.card.id);
+
+    // Alice draws Q; reaches USE_POWER phase
+    e.processEvent("alice", "DRAW_CARD", { source: "deck" });
+    const discR = e.processEvent("alice", "DISCARD_DRAWN", undefined);
+    assert.ok(discR.validEvents.includes("USE_POWER"), "discarding a Q must trigger USE_POWER phase");
+
+    // Source is locked → engine throws from applySwap (no upfront validation)
+    assert.throws(
+      () =>
+        e.processEvent("alice", "USE_POWER", {
+          power: "swap",
+          sourcePlayerId: "alice",
+          sourceCardIndex: 0, // locked
+          targetPlayerId: "bob",
+          targetCardIndex: 0,
+        }),
+      /Cannot swap locked card/,
+    );
+
+    // Hands must be unchanged
+    const aliceHandAfter = e.getState().players[0]?.hand.map((pc) => pc.card.id);
+    const bobHandAfter = e.getState().players[1]?.hand.map((pc) => pc.card.id);
+    assert.deepEqual(aliceHandAfter, aliceHandBefore);
+    assert.deepEqual(bobHandAfter, bobHandBefore);
+    // Alice's card 0 must still be locked
+    assert.equal(e.getState().players[0]?.hand[0]?.locked, true);
+  });
+
+  it("Swap (Q) — rejects swap when target card is locked", () => {
+    // Same seed as above; this time alice locks bob's card 0, then swaps with it as target.
+    const e = new GameEngine(makeConfig({ playerIds: ["alice", "bob"], seed: 26 }));
+    e.createGame();
+
+    e.processEvent("alice", "DRAW_CARD", { source: "deck" });
+    e.processEvent("alice", "DISCARD_DRAWN", undefined);
+    e.processEvent("alice", "USE_POWER", { power: "lock", targetPlayerId: "bob", cardIndex: 0 });
+    e.processEvent("alice", "END_TURN", undefined);
+
+    e.processEvent("bob", "DRAW_CARD", { source: "deck" });
+    e.processEvent("bob", "DISCARD_DRAWN", undefined);
+    e.processEvent("bob", "END_TURN", undefined);
+
+    e.processEvent("alice", "DRAW_CARD", { source: "deck" });
+    e.processEvent("alice", "DISCARD_DRAWN", undefined);
+
+    assert.throws(
+      () =>
+        e.processEvent("alice", "USE_POWER", {
+          power: "swap",
+          sourcePlayerId: "alice",
+          sourceCardIndex: 1, // unlocked
+          targetPlayerId: "bob",
+          targetCardIndex: 0, // locked
+        }),
+      /Cannot swap locked card/,
+    );
+
+    // Bob's locked card 0 must still be locked
+    assert.equal(e.getState().players[1]?.hand[0]?.locked, true);
   });
 
   it("Shuffle (J) — shuffles unlocked cards of target player", () => {
-    const e = new GameEngine(makeConfig({ seed: 555 }));
+    // seed 37 (3 players) deterministically yields a J as the first deck draw
+    const e = new GameEngine(makeConfig({ seed: 37 }));
     e.createGame();
     const players = turnOrder(e);
     const pid = players[0];
     const pid2 = players[1];
     assert.ok(pid && pid2);
+
+    assert.equal(e.getState().deck.at(-1)?.rank, "J", "test seed must produce J on first draw");
 
     const p1 = e.getState().players[1];
     assert.ok(p1);
     const originalHand = [...p1.hand.map((pc) => pc.card.id)];
     e.processEvent(pid, "DRAW_CARD", { source: "deck" });
     const discR = e.processEvent(pid, "DISCARD_DRAWN", undefined);
+    assert.ok(discR.validEvents.includes("USE_POWER"), "discarding a J must trigger USE_POWER phase");
 
-    if (discR.validEvents.includes("USE_POWER")) {
-      const shufR = e.processEvent(pid, "USE_POWER", {
-        power: "shuffle",
-        targetPlayerId: pid2,
-      });
-      assert.equal(shufR.error, undefined);
+    const shufR = e.processEvent(pid, "USE_POWER", {
+      power: "shuffle",
+      targetPlayerId: pid2,
+    });
+    assert.equal(shufR.error, undefined);
 
-      const p1after = e.getState().players[1];
-      assert.ok(p1after);
-      const newHand = p1after.hand.map((pc) => pc.card.id);
-      // Same cards, different order (or same if RNG happens to keep order — very unlikely)
-      assert.deepEqual(newHand.sort(), originalHand.sort());
-    }
+    const p1after = e.getState().players[1];
+    assert.ok(p1after);
+    const newHand = p1after.hand.map((pc) => pc.card.id);
+    // Same cards, different order (or same if RNG happens to keep order — very unlikely)
+    assert.deepEqual(newHand.sort(), originalHand.sort());
   });
 });
 
