@@ -322,6 +322,40 @@ describe("GameEngine — powers", () => {
     assert.equal(peekResult.cards.length, HAND_SIZE);
   });
 
+  it("Peek (10) — can peek opponent and returns exactly one card", () => {
+    // seed 17 (3 players) deterministically yields a 10 as the first deck draw
+    const e = new GameEngine(makeConfig({ seed: 17 }));
+    e.createGame();
+    const players = turnOrder(e);
+    const pid = players[0];
+    const opponentId = players[1];
+    assert.ok(pid && opponentId);
+
+    e.processEvent(pid, "DRAW_CARD", { source: "deck" });
+    e.processEvent(pid, "DISCARD_DRAWN", undefined);
+
+    const opponent = e.getState().players.find((p) => p.id === opponentId);
+    assert.ok(opponent);
+    const expectedCard = opponent.hand[0];
+    assert.ok(expectedCard);
+
+    const peekR = e.processEvent(pid, "USE_POWER", {
+      power: "peek",
+      target: "opponent",
+      opponentId,
+    });
+    assert.equal(peekR.error, undefined);
+    const { peekResult } = peekR;
+    assert.ok(peekResult);
+    assert.equal(peekResult.playerId, opponentId);
+    assert.equal(peekResult.cards.length, 1, "opponent peek must reveal exactly one card");
+    const revealed = peekResult.cards[0];
+    assert.ok(revealed);
+    assert.equal(revealed.index, 0, "opponent peek must return the first unlocked card index");
+    assert.equal(revealed.card.id, expectedCard.card.id);
+    assert.equal(revealed.card.rank, expectedCard.card.rank);
+  });
+
   it("Lock (K) — locks a card and creates a marker", () => {
     // seed 999 (3 players) deterministically yields a K as the first deck draw
     const e = new GameEngine(makeConfig({ seed: 999 }));
