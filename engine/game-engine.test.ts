@@ -65,6 +65,10 @@ describe("GameEngine — createGame", () => {
     assert.throws(() => new GameEngine(makeConfig({ playerIds: ["a", "b", "c", "d", "e", "f", "g"] })));
   });
 
+  it("rejects duplicate playerIds", () => {
+    assert.throws(() => new GameEngine(makeConfig({ playerIds: ["alice", "bob", "alice"] })), /Player IDs must be unique/);
+  });
+
   it("same seed produces same deal", () => {
     const e1 = new GameEngine(makeConfig({ seed: 100 }));
     const e2 = new GameEngine(makeConfig({ seed: 100 }));
@@ -363,7 +367,7 @@ describe("GameEngine — powers", () => {
     assert.equal(peekResult.cards.length, HAND_SIZE);
   });
 
-  it("Peek (10) — can peek opponent and returns exactly one card", () => {
+  it("Peek (10) — returns exactly the chosen opponent card", () => {
     // seed 17 (3 players) deterministically yields a 10 as the first deck draw
     const e = new GameEngine(makeConfig({ seed: 17 }));
     e.createGame();
@@ -377,13 +381,14 @@ describe("GameEngine — powers", () => {
 
     const opponent = e.getState().players.find((p) => p.id === opponentId);
     assert.ok(opponent);
-    const expectedCard = opponent.hand[0];
+    const expectedCard = opponent.hand[2];
     assert.ok(expectedCard);
 
     const peekR = e.processEvent(pid, "USE_POWER", {
       power: "peek",
       target: "opponent",
       opponentId,
+      opponentCardIndex: 2,
     });
     assert.equal(peekR.error, undefined);
     const { peekResult } = peekR;
@@ -392,7 +397,7 @@ describe("GameEngine — powers", () => {
     assert.equal(peekResult.cards.length, 1, "opponent peek must reveal exactly one card");
     const revealed = peekResult.cards[0];
     assert.ok(revealed);
-    assert.equal(revealed.index, 0, "opponent peek must return the first unlocked card index");
+    assert.equal(revealed.index, 2, "opponent peek must return the chosen card index");
     assert.equal(revealed.card.id, expectedCard.card.id);
     assert.equal(revealed.card.rank, expectedCard.card.rank);
   });
@@ -627,11 +632,12 @@ describe("GameEngine — powers", () => {
       power: "peek",
       target: "opponent",
       opponentId: "nobody",
+      opponentCardIndex: 0,
     });
     assert.match(r.error ?? "", /Invalid opponentId/);
   });
 
-  it("Peek (10) — rejects opponent peek when opponent has no unlocked cards", () => {
+  it("Peek (10) — rejects opponent peek when the chosen card is locked", () => {
     const e = new GameEngine(makeConfig({ seed: 17 }));
     e.createGame();
     const pid = turnOrder(e)[0];
@@ -640,17 +646,37 @@ describe("GameEngine — powers", () => {
     e.processEvent(pid, "DRAW_CARD", { source: "deck" });
     e.processEvent(pid, "DISCARD_DRAWN", undefined);
 
-    // Force all of opponent's cards to be locked.
     const opponent = e.getState().players.find((p) => p.id === oppId);
     assert.ok(opponent);
-    for (const pc of opponent.hand) pc.locked = true;
+    const targetCard = opponent.hand[1];
+    assert.ok(targetCard);
+    targetCard.locked = true;
 
     const r = e.processEvent(pid, "USE_POWER", {
       power: "peek",
       target: "opponent",
       opponentId: oppId,
+      opponentCardIndex: 1,
     });
-    assert.match(r.error ?? "", /No unlocked cards to peek at/);
+    assert.match(r.error ?? "", /Cannot peek a locked card/);
+  });
+
+  it("Peek (10) — rejects opponent peek with out-of-range cardIndex", () => {
+    const e = new GameEngine(makeConfig({ seed: 17 }));
+    e.createGame();
+    const pid = turnOrder(e)[0];
+    const oppId = turnOrder(e)[1];
+    assert.ok(pid && oppId);
+    e.processEvent(pid, "DRAW_CARD", { source: "deck" });
+    e.processEvent(pid, "DISCARD_DRAWN", undefined);
+
+    const r = e.processEvent(pid, "USE_POWER", {
+      power: "peek",
+      target: "opponent",
+      opponentId: oppId,
+      opponentCardIndex: HAND_SIZE,
+    });
+    assert.match(r.error ?? "", /Invalid opponentCardIndex/);
   });
 
   it("Shuffle (J) — rejects unknown target player", () => {
@@ -694,6 +720,24 @@ describe("GameEngine — powers", () => {
       targetCardIndex: 0,
     });
     assert.match(badTarget.error ?? "", /Invalid player in swap/);
+  });
+
+  it("Swap (Q) — rejects same source and target player", () => {
+    const e = new GameEngine(makeConfig({ seed: 9 }));
+    e.createGame();
+    const pid = turnOrder(e)[0];
+    assert.ok(pid);
+    e.processEvent(pid, "DRAW_CARD", { source: "deck" });
+    e.processEvent(pid, "DISCARD_DRAWN", undefined);
+
+    const r = e.processEvent(pid, "USE_POWER", {
+      power: "swap",
+      sourcePlayerId: pid,
+      sourceCardIndex: 0,
+      targetPlayerId: pid,
+      targetCardIndex: 1,
+    });
+    assert.match(r.error ?? "", /Swap requires two different players/);
   });
 
   it("Swap (Q) — rejects out-of-range card indices", () => {

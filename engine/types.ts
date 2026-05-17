@@ -113,7 +113,9 @@ export interface EngineConfig {
 export type PowerRank = "10" | "J" | "Q" | "K";
 
 export interface PowerActionMap {
-  "10": { power: "peek"; target: "own" } | { power: "peek"; target: "opponent"; opponentId: string };
+  "10":
+    | { power: "peek"; target: "own" }
+    | { power: "peek"; target: "opponent"; opponentId: string; opponentCardIndex: number };
   J: { power: "shuffle"; targetPlayerId: string };
   Q: {
     power: "swap";

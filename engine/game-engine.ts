@@ -67,6 +67,9 @@ export class GameEngine {
     if (config.playerIds.length < MIN_PLAYERS || config.playerIds.length > MAX_PLAYERS) {
       throw new Error(`Player count must be between ${MIN_PLAYERS} and ${MAX_PLAYERS}`);
     }
+    if (new Set(config.playerIds).size !== config.playerIds.length) {
+      throw new Error("Player IDs must be unique");
+    }
     this.config = { ...config };
     this.rng = new SeededRNG(config.seed ?? Date.now());
     this.eventLog = [];
@@ -335,7 +338,12 @@ export class GameEngine {
       if (action.target === "opponent") {
         const opponent = this.game.players.find((p) => p.id === action.opponentId);
         if (!opponent) return "Invalid opponentId";
-        if (opponent.hand.findIndex((pc) => !pc.locked) === -1) return "No unlocked cards to peek at";
+        if (action.opponentCardIndex < 0 || action.opponentCardIndex >= HAND_SIZE) {
+          return "Invalid opponentCardIndex";
+        }
+        const targetCard = opponent.hand[action.opponentCardIndex];
+        if (!targetCard) return "Card not found";
+        if (targetCard.locked) return "Cannot peek a locked card";
       }
       return null;
     }
@@ -347,6 +355,7 @@ export class GameEngine {
     }
 
     if (action.power === "swap") {
+      if (action.sourcePlayerId === action.targetPlayerId) return "Swap requires two different players";
       const source = this.game.players.find((p) => p.id === action.sourcePlayerId);
       const target = this.game.players.find((p) => p.id === action.targetPlayerId);
       if (!source || !target) return "Invalid player in swap";
@@ -511,9 +520,7 @@ export class GameEngine {
   // ────────────────────── Private: Power Resolution ────────────────────────
 
   /** Peeks at a player's own card or an opponent's card. */
-  private applyPeek(action: BasePowerAction): void {
-    if (action.power !== "peek") return;
-
+  private applyPeek(action: BasePowerAction & { power: "peek" }): void {
     if (action.target === "own") {
       const player = this.game.players[this.game.currentTurn];
       if (!player) throw new Error("Current player not found");
@@ -521,27 +528,20 @@ export class GameEngine {
         playerId: player.id,
         cards: player.hand.map((pc, i) => ({ index: i, card: pc.card })),
       };
-    } else if (action.target === "opponent" && action.opponentId) {
+    } else if (action.target === "opponent") {
       const opponent = this.game.players.find((p) => p.id === action.opponentId);
       if (!opponent) throw new Error("Invalid opponent");
-
-      // Peek at 1 random opponent card (or the first, since the player can choose)
-      // The spec says "1 opponent card" — let's return all for the player to see
-      // but only 1 card's data. Actually, let's return the first unlocked card.
-      const unlockedIdx = opponent.hand.findIndex((pc) => !pc.locked);
-      if (unlockedIdx === -1) throw new Error("No unlocked cards to peek at");
-      const playerCard = opponent.hand[unlockedIdx];
+      const playerCard = opponent.hand[action.opponentCardIndex];
       if (!playerCard) throw new Error("Card not found");
       this.lastPeekResult = {
         playerId: opponent.id,
-        cards: [{ index: unlockedIdx, card: playerCard.card }],
+        cards: [{ index: action.opponentCardIndex, card: playerCard.card }],
       };
     }
   }
 
   /** Shuffles the unlocked cards of a target player. */
-  private applyShuffle(action: BasePowerAction): void {
-    if (action.power !== "shuffle") return;
+  private applyShuffle(action: BasePowerAction & { power: "shuffle" }): void {
     const targetPlayer = this.game.players.find((p) => p.id === action.targetPlayerId);
     if (!targetPlayer) throw new Error("Invalid target player");
 
@@ -567,7 +567,7 @@ export class GameEngine {
   }
 
   /** Swaps two unlocked cards between two players. */
-  private applySwap(action: PowerAction & { power: "swap" }): void {
+  private applySwap(action: BasePowerAction & { power: "swap" }): void {
     const { sourcePlayerId, sourceCardIndex, targetPlayerId, targetCardIndex } = action;
 
     const sourcePlayer = this.game.players.find((p) => p.id === sourcePlayerId);
@@ -587,7 +587,7 @@ export class GameEngine {
   }
 
   /** Locks a target player's card, making it unswappable until the end of the game. */
-  private applyLock(action: PowerAction & { power: "lock" }): void {
+  private applyLock(action: BasePowerAction & { power: "lock" }): void {
     const { targetPlayerId, cardIndex } = action;
 
     const targetPlayer = this.game.players.find((p) => p.id === targetPlayerId);
