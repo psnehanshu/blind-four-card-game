@@ -573,6 +573,54 @@ describe("GameEngine — powers", () => {
     // Same cards, different order (or same if RNG happens to keep order — very unlikely)
     assert.deepEqual(newHand.sort(), originalHand.sort());
   });
+
+  it("Shuffle (J) — locked cards remain in their original positions", () => {
+    // 2-player seed 58: alice T1 draws K → locks bob's card 0,
+    // bob T1 draws 7 (non-power) → harmless discard,
+    // alice T2 draws J → shuffles bob.
+    const e = new GameEngine(makeConfig({ playerIds: ["alice", "bob"], seed: 58 }));
+    e.createGame();
+    const deck = e.getState().deck;
+    assert.equal(deck.at(-1)?.rank, "K", "test seed must produce K on alice's first draw");
+    assert.equal(deck.at(-3)?.rank, "J", "test seed must produce J on alice's second draw");
+
+    // Alice locks bob's card 0.
+    e.processEvent("alice", "DRAW_CARD", { source: "deck" });
+    e.processEvent("alice", "DISCARD_DRAWN", undefined);
+    e.processEvent("alice", "USE_POWER", { power: "lock", targetPlayerId: "bob", cardIndex: 0 });
+    e.processEvent("alice", "END_TURN", undefined);
+
+    // Bob plays a harmless turn.
+    e.processEvent("bob", "DRAW_CARD", { source: "deck" });
+    e.processEvent("bob", "DISCARD_DRAWN", undefined);
+    e.processEvent("bob", "END_TURN", undefined);
+
+    const bobBefore = e.getState().players[1];
+    assert.ok(bobBefore);
+    const lockedCardId = bobBefore.hand[0]?.card.id;
+    assert.ok(lockedCardId);
+    assert.equal(bobBefore.hand[0]?.locked, true);
+    const unlockedIdsBefore = [bobBefore.hand[1]?.card.id, bobBefore.hand[2]?.card.id, bobBefore.hand[3]?.card.id].sort();
+
+    // Alice shuffles bob.
+    e.processEvent("alice", "DRAW_CARD", { source: "deck" });
+    e.processEvent("alice", "DISCARD_DRAWN", undefined);
+    const shufR = e.processEvent("alice", "USE_POWER", { power: "shuffle", targetPlayerId: "bob" });
+    assert.equal(shufR.error, undefined);
+
+    const bobAfter = e.getState().players[1];
+    assert.ok(bobAfter);
+    // Locked slot 0 must contain the same card, still locked.
+    assert.equal(bobAfter.hand[0]?.card.id, lockedCardId, "locked card must stay in slot 0");
+    assert.equal(bobAfter.hand[0]?.locked, true, "locked flag must be preserved");
+    // The other three cards must still be the same set (possibly reordered among slots 1–3).
+    const unlockedIdsAfter = [bobAfter.hand[1]?.card.id, bobAfter.hand[2]?.card.id, bobAfter.hand[3]?.card.id].sort();
+    assert.deepEqual(unlockedIdsAfter, unlockedIdsBefore);
+    // None of the unlocked slots should become locked.
+    assert.equal(bobAfter.hand[1]?.locked, false);
+    assert.equal(bobAfter.hand[2]?.locked, false);
+    assert.equal(bobAfter.hand[3]?.locked, false);
+  });
 });
 
 // ───────────────────────────────  Showdown  ───────────────────────────────
