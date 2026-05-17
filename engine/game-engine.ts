@@ -101,37 +101,6 @@ export class GameEngine {
     return this.buildResult([event]);
   }
 
-  private createCommittedEvent<T extends ProposedEventType>(
-    playerId: string,
-    type: T,
-    payload: EventPayloadMap[T],
-  ): CommittedEvent {
-    const id = `evt-${eventIdCounter++}`;
-    const sequence = this.eventLog.length;
-    const timestamp = Date.now();
-
-    // Use type guards or explicit checks to satisfy Discriminated Union without 'as'
-    if (this.isDrawPayload(type, payload)) {
-      return { id, sequence, timestamp, playerId, type: "DRAW_CARD", payload };
-    }
-    if (this.isReplacePayload(type, payload)) {
-      return { id, sequence, timestamp, playerId, type: "REPLACE_CARD", payload };
-    }
-    if (type === "DISCARD_DRAWN") {
-      return { id, sequence, timestamp, playerId, type: "DISCARD_DRAWN", payload: undefined };
-    }
-    if (type === "CALL_SHOWDOWN") {
-      return { id, sequence, timestamp, playerId, type: "CALL_SHOWDOWN", payload: undefined };
-    }
-    if (this.isPowerPayload(type, payload)) {
-      return { id, sequence, timestamp, playerId, type: "USE_POWER", payload };
-    }
-    if (type === "END_TURN") {
-      return { id, sequence, timestamp, playerId, type: "END_TURN", payload: undefined };
-    }
-    throw new Error("Unknown event type");
-  }
-
   /** Current game state (public fields only). */
   getState(): Game {
     return this.game;
@@ -222,6 +191,39 @@ export class GameEngine {
       engine.applyEvent(event);
     }
     return engine;
+  }
+
+  // ────────────────────────── Private: Event Creation ──────────────────────
+
+  private createCommittedEvent<T extends ProposedEventType>(
+    playerId: string,
+    type: T,
+    payload: EventPayloadMap[T],
+  ): CommittedEvent {
+    const id = `evt-${eventIdCounter++}`;
+    const sequence = this.eventLog.length;
+    const timestamp = Date.now();
+
+    // Use type guards or explicit checks to satisfy Discriminated Union without 'as'
+    if (this.isDrawPayload(type, payload)) {
+      return { id, sequence, timestamp, playerId, type: "DRAW_CARD", payload };
+    }
+    if (this.isReplacePayload(type, payload)) {
+      return { id, sequence, timestamp, playerId, type: "REPLACE_CARD", payload };
+    }
+    if (type === "DISCARD_DRAWN") {
+      return { id, sequence, timestamp, playerId, type: "DISCARD_DRAWN", payload: undefined };
+    }
+    if (type === "CALL_SHOWDOWN") {
+      return { id, sequence, timestamp, playerId, type: "CALL_SHOWDOWN", payload: undefined };
+    }
+    if (this.isPowerPayload(type, payload)) {
+      return { id, sequence, timestamp, playerId, type: "USE_POWER", payload };
+    }
+    if (type === "END_TURN") {
+      return { id, sequence, timestamp, playerId, type: "END_TURN", payload: undefined };
+    }
+    throw new Error("Unknown event type");
   }
 
   // ────────────────────────── Private: Validation ──────────────────────────
