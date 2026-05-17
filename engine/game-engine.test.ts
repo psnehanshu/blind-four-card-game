@@ -91,7 +91,7 @@ describe("GameEngine — turn flow", () => {
 
   function drawThenEnd(engine: GameEngine, playerId: string): void {
     engine.processEvent(playerId, "DRAW_CARD", { source: "deck" });
-    engine.processEvent(playerId, "DISCARD_DRAWN");
+    engine.processEvent(playerId, "DISCARD_DRAWN", undefined);
     if (engine.getValidEvents(playerId).includes("USE_POWER")) {
       // Try each possible power action until one succeeds
       const otherPlayers = turnOrder(engine).filter((p) => p !== playerId);
@@ -119,7 +119,7 @@ describe("GameEngine — turn flow", () => {
         if (!r.error) break;
       }
     }
-    engine.processEvent(playerId, "END_TURN");
+    engine.processEvent(playerId, "END_TURN", undefined);
   }
 
   it("draw → discard drawn → end turn advances to next player", () => {
@@ -129,9 +129,9 @@ describe("GameEngine — turn flow", () => {
     // Alice's first turn
     let r = e.processEvent(players[0], "DRAW_CARD", { source: "deck" });
     assert.equal(r.error, undefined);
-    r = e.processEvent(players[0], "DISCARD_DRAWN");
+    r = e.processEvent(players[0], "DISCARD_DRAWN", undefined);
     assert.equal(r.error, undefined);
-    r = e.processEvent(players[0], "END_TURN");
+    r = e.processEvent(players[0], "END_TURN", undefined);
     assert.equal(r.error, undefined);
     assert.equal(e.getState().currentTurn, 1);
 
@@ -148,7 +148,7 @@ describe("GameEngine — turn flow", () => {
 
     e.processEvent(playerId, "DRAW_CARD", { source: "deck" });
     e.processEvent(playerId, "REPLACE_CARD", { handIndex: 2 });
-    e.processEvent(playerId, "END_TURN");
+    e.processEvent(playerId, "END_TURN", undefined);
 
     const newCard = e.getState().players[0].hand[2].card;
     assert.notEqual(newCard.id, oldCard.id);
@@ -190,14 +190,14 @@ describe("GameEngine — turn flow", () => {
 
     // We might not get a King. Let's still try: draw, discard, if power, use it to lock card 0
     engine2.processEvent(p2, "DRAW_CARD", { source: "deck" });
-    const discR = engine2.processEvent(p2, "DISCARD_DRAWN");
+    const discR = engine2.processEvent(p2, "DISCARD_DRAWN", undefined);
     if (!discR.error && discR.validEvents.includes("USE_POWER")) {
       engine2.processEvent(p2, "USE_POWER", {
         power: "lock",
         targetPlayerId: p2,
         cardIndex: 0,
       });
-      engine2.processEvent(p2, "END_TURN");
+      engine2.processEvent(p2, "END_TURN", undefined);
 
       // Next player's turn, draw and try to replace the locked card
       const p3 = turnOrder(engine2)[1];
@@ -206,8 +206,8 @@ describe("GameEngine — turn flow", () => {
       // but can we even target it? The spec says locked cards can't be replaced.
       // REPLACE only replaces from your own hand. So this test is moot for
       // another player. Let's verify on the lock owner's next turn.
-      engine2.processEvent(p3, "DISCARD_DRAWN");
-      engine2.processEvent(p3, "END_TURN");
+      engine2.processEvent(p3, "DISCARD_DRAWN", undefined);
+      engine2.processEvent(p3, "END_TURN", undefined);
 
       // Now back to p2, draw, try to replace locked card index 0
       engine2.processEvent(p2, "DRAW_CARD", { source: "deck" });
@@ -221,8 +221,8 @@ describe("GameEngine — turn flow", () => {
     const pid = turnOrder(e)[0];
     // First put a card in the discard pile
     e.processEvent(pid, "DRAW_CARD", { source: "deck" });
-    e.processEvent(pid, "DISCARD_DRAWN");
-    e.processEvent(pid, "END_TURN");
+    e.processEvent(pid, "DISCARD_DRAWN", undefined);
+    e.processEvent(pid, "END_TURN", undefined);
 
     // Next player draws from discard
     const pid2 = turnOrder(e)[1];
@@ -239,14 +239,14 @@ describe("GameEngine — turn flow", () => {
       const currentPid = turnOrder(e)[0];
       const r = e.processEvent(currentPid, "DRAW_CARD", { source: "deck" });
       if (r.error) break;
-      e.processEvent(currentPid, "DISCARD_DRAWN");
+      e.processEvent(currentPid, "DISCARD_DRAWN", undefined);
       if (e.getValidEvents(currentPid).includes("USE_POWER")) {
         e.processEvent(currentPid, "USE_POWER", {
           power: "peek",
           target: "own",
         });
       }
-      e.processEvent(currentPid, "END_TURN");
+      e.processEvent(currentPid, "END_TURN", undefined);
     }
 
     const r = e.processEvent(turnOrder(e)[0], "DRAW_CARD", { source: "deck" });
@@ -273,13 +273,13 @@ describe("GameEngine — powers", () => {
     // Draw and discard until we discard a power card (10)
     // Check if we get a power phase
     e.processEvent(pid, "DRAW_CARD", { source: "deck" });
-    const discR = e.processEvent(pid, "DISCARD_DRAWN");
+    const discR = e.processEvent(pid, "DISCARD_DRAWN", undefined);
 
     if (discR.validEvents.includes("USE_POWER")) {
       const peekR = e.processEvent(pid, "USE_POWER", {
         power: "peek",
         target: "own",
-      } as PowerAction);
+      });
       assert.equal(peekR.error, undefined);
       const { peekResult } = peekR;
       assert.ok(peekResult);
@@ -294,14 +294,14 @@ describe("GameEngine — powers", () => {
     const pid = turnOrder(e)[0];
 
     e.processEvent(pid, "DRAW_CARD", { source: "deck" });
-    const discR = e.processEvent(pid, "DISCARD_DRAWN");
+    const discR = e.processEvent(pid, "DISCARD_DRAWN", undefined);
 
     if (discR.validEvents.includes("USE_POWER")) {
       const lockR = e.processEvent(pid, "USE_POWER", {
         power: "lock",
         targetPlayerId: pid,
         cardIndex: 0,
-      } as PowerAction);
+      });
       assert.equal(lockR.error, undefined);
       assert.ok(e.getState().players[0].hand[0].locked);
     }
@@ -314,7 +314,7 @@ describe("GameEngine — powers", () => {
     const pid2 = turnOrder(e)[1];
 
     e.processEvent(pid, "DRAW_CARD", { source: "deck" });
-    const discR = e.processEvent(pid, "DISCARD_DRAWN");
+    const discR = e.processEvent(pid, "DISCARD_DRAWN", undefined);
 
     if (discR.validEvents.includes("USE_POWER")) {
       const cardA = e.getState().players[0].hand[0];
@@ -326,7 +326,7 @@ describe("GameEngine — powers", () => {
         sourceCardIndex: 0,
         targetPlayerId: pid2,
         targetCardIndex: 0,
-      } as PowerAction);
+      });
       assert.equal(swapR.error, undefined);
 
       const newCardA = e.getState().players[0].hand[0];
@@ -344,13 +344,13 @@ describe("GameEngine — powers", () => {
 
     const originalHand = [...e.getState().players[1].hand.map((pc) => pc.card.id)];
     e.processEvent(pid, "DRAW_CARD", { source: "deck" });
-    const discR = e.processEvent(pid, "DISCARD_DRAWN");
+    const discR = e.processEvent(pid, "DISCARD_DRAWN", undefined);
 
     if (discR.validEvents.includes("USE_POWER")) {
       const shufR = e.processEvent(pid, "USE_POWER", {
         power: "shuffle",
         targetPlayerId: pid2,
-      } as PowerAction);
+      });
       assert.equal(shufR.error, undefined);
 
       const newHand = e.getState().players[1].hand.map((pc) => pc.card.id);
@@ -371,9 +371,9 @@ describe("GameEngine — showdown", () => {
 
     // Complete 1 turn for player 0
     e.processEvent(pid, "DRAW_CARD", { source: "deck" });
-    e.processEvent(pid, "DISCARD_DRAWN");
+    e.processEvent(pid, "DISCARD_DRAWN", undefined);
     // Now at showdown_eligible — try to call showdown (should fail, only 1 turn)
-    const callR = e.processEvent(pid, "CALL_SHOWDOWN");
+    const callR = e.processEvent(pid, "CALL_SHOWDOWN", undefined);
     assert.ok(callR.error); // Not eligible yet
   });
 
@@ -384,7 +384,7 @@ describe("GameEngine — showdown", () => {
     // Helper: play one full turn for a player (draw → discard → resolve power → end)
     function playTurn(pid: string): void {
       e.processEvent(pid, "DRAW_CARD", { source: "deck" });
-      e.processEvent(pid, "DISCARD_DRAWN");
+      e.processEvent(pid, "DISCARD_DRAWN", undefined);
       if (e.getValidEvents(pid).includes("USE_POWER")) {
         const otherPlayers = turnOrder(e).filter((p) => p !== pid);
         const attempts: PowerAction[] = [
@@ -411,7 +411,7 @@ describe("GameEngine — showdown", () => {
           if (!r.error) break;
         }
       }
-      e.processEvent(pid, "END_TURN");
+      e.processEvent(pid, "END_TURN", undefined);
     }
 
     // Complete MIN_TURNS_BEFORE_SHOWDOWN turns for each player
@@ -425,7 +425,7 @@ describe("GameEngine — showdown", () => {
     // Now on player 0's 3rd turn — draw and discard
     const pid = players[0];
     e.processEvent(pid, "DRAW_CARD", { source: "deck" });
-    e.processEvent(pid, "DISCARD_DRAWN");
+    e.processEvent(pid, "DISCARD_DRAWN", undefined);
     if (e.getValidEvents(pid).includes("USE_POWER")) {
       const otherPlayers = turnOrder(e).filter((p) => p !== pid);
       const attempts: PowerAction[] = [
@@ -454,7 +454,7 @@ describe("GameEngine — showdown", () => {
     }
 
     // Should be able to call showdown now
-    const callR = e.processEvent(pid, "CALL_SHOWDOWN");
+    const callR = e.processEvent(pid, "CALL_SHOWDOWN", undefined);
     assert.equal(callR.error, undefined);
     assert.equal(e.getState().state, "showdown");
     assert.equal(e.getState().callerId, pid);
@@ -476,7 +476,7 @@ describe("GameEngine — event log & replay", () => {
     const players = turnOrder(engine);
     const pid = players[0];
     engine.processEvent(pid, "DRAW_CARD", { source: "deck" });
-    engine.processEvent(pid, "DISCARD_DRAWN");
+    engine.processEvent(pid, "DISCARD_DRAWN", undefined);
     if (engine.getValidEvents(pid).includes("USE_POWER")) {
       const attempts: PowerAction[] = [
         { power: "peek", target: "own" },
@@ -493,7 +493,7 @@ describe("GameEngine — event log & replay", () => {
         if (!r.error) break;
       }
     }
-    engine.processEvent(pid, "END_TURN");
+    engine.processEvent(pid, "END_TURN", undefined);
   }
 
   it("replaying event log produces identical state", () => {
@@ -542,7 +542,7 @@ describe("GameEngine — visibility", () => {
     const pid = turnOrder(e)[0];
 
     e.processEvent(pid, "DRAW_CARD", { source: "deck" });
-    e.processEvent(pid, "DISCARD_DRAWN");
+    e.processEvent(pid, "DISCARD_DRAWN", undefined);
 
     const vs = e.getVisibleState("bob");
     assert.ok(vs.discardPile.length > 0);
@@ -576,7 +576,7 @@ describe("GameEngine — edge cases", () => {
     const r = e.processEvent(turnOrder(e)[0], "USE_POWER", {
       power: "peek",
       target: "own",
-    } as PowerAction);
+    });
     assert.ok(r.error);
   });
 });

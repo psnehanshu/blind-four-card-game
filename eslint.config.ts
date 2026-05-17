@@ -13,5 +13,12 @@ export default defineConfig(js.configs.recommended, tseslint.configs.strict, tse
         caughtErrorsIgnorePattern: "^_",
       },
     ],
+    "@typescript-eslint/consistent-type-assertions": [
+      "error",
+      {
+        assertionStyle: "never",
+      },
+    ],
+    "@typescript-eslint/no-non-null-assertion": "error",
   },
 });

@@ -14,6 +14,7 @@ import type {
   VisibleGameState,
   VisiblePlayerState,
   Rank,
+  EventPayloadMap,
 } from "./types.js";
 import { HAND_SIZE, MIN_PLAYERS, MAX_PLAYERS, MIN_TURNS_BEFORE_SHOWDOWN } from "./types.js";
 import { createDeck, isPowerCard } from "./cards.js";
@@ -32,9 +33,18 @@ const POWER_ACTION_MAP: Record<string, string> = {
 
 export class GameEngine {
   private config: EngineConfig;
-  private game!: Game;
+  private _game: Game | null = null;
   private eventLog: CommittedEvent[];
   private rng: SeededRNG;
+
+  private get game(): Game {
+    if (!this._game) throw new Error("Game not initialized");
+    return this._game;
+  }
+
+  private set game(g: Game) {
+    this._game = g;
+  }
 
   // Internal turn-phase tracking
   private phase: TurnPhase;
@@ -73,25 +83,53 @@ export class GameEngine {
   }
 
   /** Process a player action. Validates → commits → reduces → returns result. */
-  processEvent(playerId: string, eventType: ProposedEventType, payload?: unknown): EngineResult {
+  processEvent<T extends ProposedEventType>(
+    playerId: string,
+    eventType: T,
+    payload: EventPayloadMap[T],
+  ): EngineResult {
     const error = this.validateEvent(playerId, eventType, payload);
     if (error) {
       return { ...this.buildResult([]), error };
     }
 
-    const event: CommittedEvent = {
-      id: `evt-${eventIdCounter++}`,
-      sequence: this.eventLog.length,
-      timestamp: Date.now(),
-      playerId,
-      type: eventType,
-      payload,
-    };
+    const event = this.createCommittedEvent(playerId, eventType, payload);
 
     this.eventLog.push(event);
     this.applyEvent(event);
 
     return this.buildResult([event]);
+  }
+
+  private createCommittedEvent<T extends ProposedEventType>(
+    playerId: string,
+    type: T,
+    payload: EventPayloadMap[T],
+  ): CommittedEvent {
+    const id = `evt-${eventIdCounter++}`;
+    const sequence = this.eventLog.length;
+    const timestamp = Date.now();
+
+    // Use type guards or explicit checks to satisfy Discriminated Union without 'as'
+    if (this.isDrawPayload(type, payload)) {
+      return { id, sequence, timestamp, playerId, type: "DRAW_CARD", payload };
+    }
+    if (this.isReplacePayload(type, payload)) {
+      return { id, sequence, timestamp, playerId, type: "REPLACE_CARD", payload };
+    }
+    if (type === "DISCARD_DRAWN") {
+      return { id, sequence, timestamp, playerId, type: "DISCARD_DRAWN", payload: undefined };
+    }
+    if (type === "CALL_SHOWDOWN") {
+      return { id, sequence, timestamp, playerId, type: "CALL_SHOWDOWN", payload: undefined };
+    }
+    if (this.isPowerPayload(type, payload)) {
+      return { id, sequence, timestamp, playerId, type: "USE_POWER", payload };
+    }
+    if (type === "END_TURN") {
+      return { id, sequence, timestamp, playerId, type: "END_TURN", payload: undefined };
+    }
+    throw new Error("Unknown event type");
   }
 
   /** Current game state (public fields only). */
@@ -188,78 +226,84 @@ export class GameEngine {
 
   // ────────────────────────── Private: Validation ──────────────────────────
 
-  private validateEvent(playerId: string, eventType: ProposedEventType, payload?: unknown): string | null {
+  private validateEvent<T extends ProposedEventType>(
+    playerId: string,
+    eventType: T,
+    payload: EventPayloadMap[T],
+  ): string | null {
     if (this.game.state === "finished") return "Game is already finished";
 
     const currentPlayer = this.game.players[this.game.currentTurn];
     if (currentPlayer.id !== playerId) return "Not your turn";
 
     // Phase-based validation
-    switch (eventType) {
-      case "DRAW_CARD":
-        if (this.phase !== "draw") return "Must be in draw phase";
-        if (this.drawnCard) return "Already drew this turn";
-        {
-          const source = (payload as { source?: string })?.source ?? "deck";
-          if (source === "discard") {
-            if (this.game.discardPile.length === 0) return "Discard pile is empty";
-          } else if (this.game.deck.length === 0) return "Deck is empty";
-        }
-        break;
-      case "REPLACE_CARD":
-      case "DISCARD_DRAWN":
-        if (this.phase !== "decision") return "Must replace or discard drawn card";
-        if (!this.drawnCard) return "No card drawn yet";
-        break;
-      case "USE_POWER":
-        if (this.phase !== "power") return "No power to resolve";
-        if (!this.pendingPowerRank) return "No pending power";
-        {
-          const action = payload as PowerAction;
-          if (!action?.power) return "Invalid power action";
-          const expected = POWER_ACTION_MAP[this.pendingPowerRank];
-          if (action.power !== expected) {
-            return `Expected power action "${expected}" but got "${action.power}"`;
-          }
-        }
-        break;
-      case "CALL_SHOWDOWN":
-        if (this.phase !== "showdown_eligible") return "Cannot call showdown now";
-        if (this.game.state === "showdown") return "Showdown already in progress";
-        if (!this.isShowdownEligible()) return "Must complete 2 turns each before showdown";
-        break;
-      case "END_TURN":
-        if (this.phase !== "showdown_eligible") return "Cannot end turn now";
-        if (this.game.state === "showdown" && playerId === this.game.callerId) {
-          return "Caller gets no more turns";
-        }
-        break;
+    if (this.isDrawPayload(eventType, payload)) {
+      if (this.phase !== "draw") return "Must be in draw phase";
+      if (this.drawnCard) return "Already drew this turn";
+      const source = payload.source ?? "deck";
+      if (source === "discard") {
+        if (this.game.discardPile.length === 0) return "Discard pile is empty";
+      } else if (this.game.deck.length === 0) return "Deck is empty";
+    } else if (eventType === "REPLACE_CARD" || eventType === "DISCARD_DRAWN") {
+      if (this.phase !== "decision") return "Must replace or discard drawn card";
+      if (!this.drawnCard) return "No card drawn yet";
+    } else if (this.isPowerPayload(eventType, payload)) {
+      if (this.phase !== "power") return "No power to resolve";
+      if (!this.pendingPowerRank) return "No pending power";
+      const action = payload;
+      if (!action.power) return "Invalid power action";
+      const expected = POWER_ACTION_MAP[this.pendingPowerRank];
+      if (action.power !== expected) {
+        return `Expected power action "${expected}" but got "${action.power}"`;
+      }
+    } else if (eventType === "CALL_SHOWDOWN") {
+      if (this.phase !== "showdown_eligible") return "Cannot call showdown now";
+      if (this.game.state === "showdown") return "Showdown already in progress";
+      if (!this.isShowdownEligible()) return "Must complete 2 turns each before showdown";
+    } else if (eventType === "END_TURN") {
+      if (this.phase !== "showdown_eligible") return "Cannot end turn now";
+      if (this.game.state === "showdown" && playerId === this.game.callerId) {
+        return "Caller gets no more turns";
+      }
     }
 
     return null;
   }
 
+  // ────────────────────────── Private: Type Guards ──────────────────────
+
+  private isDrawPayload(type: ProposedEventType, _payload: unknown): _payload is EventPayloadMap["DRAW_CARD"] {
+    return type === "DRAW_CARD";
+  }
+
+  private isReplacePayload(type: ProposedEventType, _payload: unknown): _payload is EventPayloadMap["REPLACE_CARD"] {
+    return type === "REPLACE_CARD";
+  }
+
+  private isPowerPayload(type: ProposedEventType, _payload: unknown): _payload is PowerAction {
+    return type === "USE_POWER";
+  }
+
   // ────────────────────────── Private: Event Reducer ──────────────────────
 
   private applyEvent(event: CommittedEvent): void {
-    switch (event.type) {
-      case "DRAW_CARD":
-        return this.applyDraw(event);
-      case "REPLACE_CARD":
-        return this.applyReplace(event);
-      case "DISCARD_DRAWN":
-        return this.applyDiscardDrawn(event);
-      case "CALL_SHOWDOWN":
-        return this.applyCallShowdown(event);
-      case "USE_POWER":
-        return this.applyUsePower(event);
-      case "END_TURN":
-        return this.applyEndTurn(event);
+    if (event.type === "DRAW_CARD") {
+      this.applyDraw(event);
+    } else if (event.type === "REPLACE_CARD") {
+      this.applyReplace(event);
+    } else if (event.type === "DISCARD_DRAWN") {
+      this.applyDiscardDrawn(event);
+    } else if (event.type === "CALL_SHOWDOWN") {
+      this.applyCallShowdown(event);
+    } else if (event.type === "USE_POWER") {
+      this.applyUsePower(event);
+    } else if (event.type === "END_TURN") {
+      this.applyEndTurn(event);
     }
   }
 
-  private applyDraw(event: CommittedEvent): void {
-    const source = (event.payload as { source?: string })?.source ?? "deck";
+  private applyDraw(event: CommittedEvent<"DRAW_CARD">): void {
+    const source = event.payload.source ?? "deck";
     let drawn: Card;
 
     if (source === "discard") {
@@ -276,8 +320,8 @@ export class GameEngine {
     this.phase = "decision";
   }
 
-  private applyReplace(event: CommittedEvent): void {
-    const handIndex = (event.payload as { handIndex?: number })?.handIndex;
+  private applyReplace(event: CommittedEvent<"REPLACE_CARD">): void {
+    const handIndex = event.payload.handIndex;
     if (handIndex === undefined || handIndex < 0 || handIndex >= HAND_SIZE) {
       throw new Error("Invalid hand index");
     }
@@ -297,7 +341,7 @@ export class GameEngine {
     this.discardAndCheckPower(target.card);
   }
 
-  private applyDiscardDrawn(_event: CommittedEvent): void {
+  private applyDiscardDrawn(_event: CommittedEvent<"DISCARD_DRAWN">): void {
     const { drawnCard } = this;
     if (!drawnCard) throw new Error("No card drawn yet");
 
@@ -305,7 +349,7 @@ export class GameEngine {
     this.discardAndCheckPower(drawnCard);
   }
 
-  private applyCallShowdown(_event: CommittedEvent): void {
+  private applyCallShowdown(_event: CommittedEvent<"CALL_SHOWDOWN">): void {
     const callerId = this.game.players[this.game.currentTurn].id;
     this.game.state = "showdown";
     this.game.callerId = callerId;
@@ -313,8 +357,8 @@ export class GameEngine {
     this.advanceTurn();
   }
 
-  private applyUsePower(event: CommittedEvent): void {
-    const action = event.payload as PowerAction;
+  private applyUsePower(event: CommittedEvent<"USE_POWER">): void {
+    const action = event.payload;
     if (!action || !action.power) throw new Error("Invalid power action");
 
     // Determine effective power (handle joker mimic)
@@ -345,7 +389,7 @@ export class GameEngine {
     this.phase = "showdown_eligible";
   }
 
-  private applyEndTurn(_event: CommittedEvent): void {
+  private applyEndTurn(_event: CommittedEvent<"END_TURN">): void {
     this.advanceTurn();
   }
 
@@ -395,9 +439,8 @@ export class GameEngine {
     }
   }
 
-  private applySwap(action: PowerAction): void {
-    if (action.power !== "swap") return;
-    const { sourcePlayerId, sourceCardIndex, targetPlayerId, targetCardIndex } = action as PowerAction & { power: "swap" };
+  private applySwap(action: PowerAction & { power: "swap" }): void {
+    const { sourcePlayerId, sourceCardIndex, targetPlayerId, targetCardIndex } = action;
 
     const sourcePlayer = this.game.players.find((p) => p.id === sourcePlayerId);
     const targetPlayer = this.game.players.find((p) => p.id === targetPlayerId);
@@ -410,11 +453,8 @@ export class GameEngine {
     targetPlayer.hand[targetCardIndex] = temp;
   }
 
-  private applyLock(action: PowerAction): void {
-    if (action.power !== "lock") return;
-    const { targetPlayerId, cardIndex } = action as PowerAction & {
-      power: "lock";
-    };
+  private applyLock(action: PowerAction & { power: "lock" }): void {
+    const { targetPlayerId, cardIndex } = action;
 
     const targetPlayer = this.game.players.find((p) => p.id === targetPlayerId);
     if (!targetPlayer) throw new Error("Invalid target player");
@@ -509,22 +549,29 @@ export class GameEngine {
 
   private buildInitialGame(): Game {
     const deck = this.rng.shuffle(createDeck());
-    const players: Player[] = this.config.playerIds.map((id) => ({
-      id,
-      name: id,
-      hand: [] as unknown as [PlayerCard, PlayerCard, PlayerCard, PlayerCard],
-      connected: true,
-    }));
-
-    for (let i = 0; i < this.config.playerIds.length; i++) {
+    const players: Player[] = this.config.playerIds.map((id) => {
       const hand: PlayerCard[] = [];
       for (let j = 0; j < HAND_SIZE; j++) {
         const card = deck.pop();
         if (!card) throw new Error("Deck exhausted during deal");
         hand.push({ card, locked: false });
       }
-      players[i].hand = hand as [PlayerCard, PlayerCard, PlayerCard, PlayerCard];
-    }
+
+      // Hand consists of 4 cards exactly
+      const c1 = hand[0];
+      const c2 = hand[1];
+      const c3 = hand[2];
+      const c4 = hand[3];
+
+      if (!c1 || !c2 || !c3 || !c4) throw new Error("Failed to deal 4 cards");
+
+      return {
+        id,
+        name: id,
+        hand: [c1, c2, c3, c4],
+        connected: true,
+      };
+    });
 
     return {
       id: this.config.gameId,

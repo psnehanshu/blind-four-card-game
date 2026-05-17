@@ -53,28 +53,43 @@ export interface Game {
 /** Sub-phase within a single turn state, governing which actions are valid. */
 export type TurnPhase = "draw" | "decision" | "power" | "showdown_eligible";
 
+/** Mapping of event types to their expected payload data. */
+export interface EventPayloadMap {
+  DRAW_CARD: { source: "deck" | "discard" };
+  REPLACE_CARD: { handIndex: number };
+  DISCARD_DRAWN: undefined;
+  CALL_SHOWDOWN: undefined;
+  USE_POWER: PowerAction;
+  END_TURN: undefined;
+}
+
 /** Actions a player may propose during their turn. */
-export type ProposedEventType =
-  | "DRAW_CARD"
-  | "REPLACE_CARD"
-  | "DISCARD_DRAWN"
-  | "CALL_SHOWDOWN"
-  | "USE_POWER"
-  | "END_TURN";
+export type ProposedEventType = keyof EventPayloadMap;
+
+/** Combined event type and payload for type-safe processing. */
+export type EventData = {
+  [K in ProposedEventType]: {
+    type: K;
+    payload: EventPayloadMap[K];
+  };
+}[ProposedEventType];
 
 /** An event that has been validated and appended to the event log. */
-export interface CommittedEvent<T = unknown> {
-  id: string;
-  /** Monotonically increasing index in the event log. */
-  sequence: number;
-  /** Unix timestamp (ms) when the event was committed. */
-  timestamp: number;
-  /** The player who proposed this event. */
-  playerId: string;
-  type: ProposedEventType;
-  /** Arbitrary data specific to the event type. */
-  payload: T;
-}
+export type CommittedEvent<T extends ProposedEventType = ProposedEventType> =
+  T extends ProposedEventType
+    ? {
+        id: string;
+        /** Monotonically increasing index in the event log. */
+        sequence: number;
+        /** Unix timestamp (ms) when the event was committed. */
+        timestamp: number;
+        /** The player who proposed this event. */
+        playerId: string;
+        type: T;
+        /** Arbitrary data specific to the event type. */
+        payload: EventPayloadMap[T];
+      }
+    : never;
 
 /** A King or Joker card placed face-up as a lock marker. */
 export interface LockMarker {
