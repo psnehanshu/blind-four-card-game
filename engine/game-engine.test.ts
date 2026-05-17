@@ -574,6 +574,179 @@ describe("GameEngine — powers", () => {
     assert.deepEqual(newHand.sort(), originalHand.sort());
   });
 
+  it("Peek (10) — rejects opponent peek with unknown opponentId", () => {
+    const e = new GameEngine(makeConfig({ seed: 17 }));
+    e.createGame();
+    const pid = turnOrder(e)[0];
+    assert.ok(pid);
+    e.processEvent(pid, "DRAW_CARD", { source: "deck" });
+    e.processEvent(pid, "DISCARD_DRAWN", undefined);
+
+    const r = e.processEvent(pid, "USE_POWER", {
+      power: "peek",
+      target: "opponent",
+      opponentId: "nobody",
+    });
+    assert.match(r.error ?? "", /Invalid opponentId/);
+  });
+
+  it("Peek (10) — rejects opponent peek when opponent has no unlocked cards", () => {
+    const e = new GameEngine(makeConfig({ seed: 17 }));
+    e.createGame();
+    const pid = turnOrder(e)[0];
+    const oppId = turnOrder(e)[1];
+    assert.ok(pid && oppId);
+    e.processEvent(pid, "DRAW_CARD", { source: "deck" });
+    e.processEvent(pid, "DISCARD_DRAWN", undefined);
+
+    // Force all of opponent's cards to be locked.
+    const opponent = e.getState().players.find((p) => p.id === oppId);
+    assert.ok(opponent);
+    for (const pc of opponent.hand) pc.locked = true;
+
+    const r = e.processEvent(pid, "USE_POWER", {
+      power: "peek",
+      target: "opponent",
+      opponentId: oppId,
+    });
+    assert.match(r.error ?? "", /No unlocked cards to peek at/);
+  });
+
+  it("Shuffle (J) — rejects unknown target player", () => {
+    const e = new GameEngine(makeConfig({ seed: 37 }));
+    e.createGame();
+    const pid = turnOrder(e)[0];
+    assert.ok(pid);
+    e.processEvent(pid, "DRAW_CARD", { source: "deck" });
+    e.processEvent(pid, "DISCARD_DRAWN", undefined);
+
+    const r = e.processEvent(pid, "USE_POWER", {
+      power: "shuffle",
+      targetPlayerId: "nobody",
+    });
+    assert.match(r.error ?? "", /Invalid target player/);
+  });
+
+  it("Swap (Q) — rejects unknown source/target players", () => {
+    const e = new GameEngine(makeConfig({ seed: 9 }));
+    e.createGame();
+    const pid = turnOrder(e)[0];
+    const pid2 = turnOrder(e)[1];
+    assert.ok(pid && pid2);
+    e.processEvent(pid, "DRAW_CARD", { source: "deck" });
+    e.processEvent(pid, "DISCARD_DRAWN", undefined);
+
+    const badSource = e.processEvent(pid, "USE_POWER", {
+      power: "swap",
+      sourcePlayerId: "ghost",
+      sourceCardIndex: 0,
+      targetPlayerId: pid2,
+      targetCardIndex: 0,
+    });
+    assert.match(badSource.error ?? "", /Invalid player in swap/);
+
+    const badTarget = e.processEvent(pid, "USE_POWER", {
+      power: "swap",
+      sourcePlayerId: pid,
+      sourceCardIndex: 0,
+      targetPlayerId: "ghost",
+      targetCardIndex: 0,
+    });
+    assert.match(badTarget.error ?? "", /Invalid player in swap/);
+  });
+
+  it("Swap (Q) — rejects out-of-range card indices", () => {
+    const e = new GameEngine(makeConfig({ seed: 9 }));
+    e.createGame();
+    const pid = turnOrder(e)[0];
+    const pid2 = turnOrder(e)[1];
+    assert.ok(pid && pid2);
+    e.processEvent(pid, "DRAW_CARD", { source: "deck" });
+    e.processEvent(pid, "DISCARD_DRAWN", undefined);
+
+    const badSourceIdx = e.processEvent(pid, "USE_POWER", {
+      power: "swap",
+      sourcePlayerId: pid,
+      sourceCardIndex: HAND_SIZE,
+      targetPlayerId: pid2,
+      targetCardIndex: 0,
+    });
+    assert.match(badSourceIdx.error ?? "", /Invalid source card index/);
+
+    const badTargetIdx = e.processEvent(pid, "USE_POWER", {
+      power: "swap",
+      sourcePlayerId: pid,
+      sourceCardIndex: 0,
+      targetPlayerId: pid2,
+      targetCardIndex: -1,
+    });
+    assert.match(badTargetIdx.error ?? "", /Invalid target card index/);
+  });
+
+  it("Lock (K) — rejects unknown target player", () => {
+    const e = new GameEngine(makeConfig({ seed: 999 }));
+    e.createGame();
+    const pid = turnOrder(e)[0];
+    assert.ok(pid);
+    e.processEvent(pid, "DRAW_CARD", { source: "deck" });
+    e.processEvent(pid, "DISCARD_DRAWN", undefined);
+
+    const r = e.processEvent(pid, "USE_POWER", {
+      power: "lock",
+      targetPlayerId: "nobody",
+      cardIndex: 0,
+    });
+    assert.match(r.error ?? "", /Invalid target player/);
+  });
+
+  it("Lock (K) — rejects out-of-range card index", () => {
+    const e = new GameEngine(makeConfig({ seed: 999 }));
+    e.createGame();
+    const pid = turnOrder(e)[0];
+    assert.ok(pid);
+    e.processEvent(pid, "DRAW_CARD", { source: "deck" });
+    e.processEvent(pid, "DISCARD_DRAWN", undefined);
+
+    const tooBig = e.processEvent(pid, "USE_POWER", {
+      power: "lock",
+      targetPlayerId: pid,
+      cardIndex: HAND_SIZE,
+    });
+    assert.match(tooBig.error ?? "", /Invalid card index/);
+
+    const negative = e.processEvent(pid, "USE_POWER", {
+      power: "lock",
+      targetPlayerId: pid,
+      cardIndex: -1,
+    });
+    assert.match(negative.error ?? "", /Invalid card index/);
+  });
+
+  it("Lock (K) — rejects locking an already-locked card", () => {
+    // 2-player seed 7: alice draws K, bob draws 7, alice draws 8 — but we need K then K.
+    // Easier path: lock card 0 manually, then try to lock it again via 3p seed 999.
+    const e = new GameEngine(makeConfig({ seed: 999 }));
+    e.createGame();
+    const pid = turnOrder(e)[0];
+    assert.ok(pid);
+    e.processEvent(pid, "DRAW_CARD", { source: "deck" });
+    e.processEvent(pid, "DISCARD_DRAWN", undefined);
+
+    // Pre-lock card 0 directly to exercise the already-locked branch.
+    const player = e.getState().players.find((p) => p.id === pid);
+    assert.ok(player);
+    const slot0 = player.hand[0];
+    assert.ok(slot0);
+    slot0.locked = true;
+
+    const r = e.processEvent(pid, "USE_POWER", {
+      power: "lock",
+      targetPlayerId: pid,
+      cardIndex: 0,
+    });
+    assert.match(r.error ?? "", /Card is already locked/);
+  });
+
   it("Shuffle (J) — locked cards remain in their original positions", () => {
     // 2-player seed 58: alice T1 draws K → locks bob's card 0,
     // bob T1 draws 7 (non-power) → harmless discard,
