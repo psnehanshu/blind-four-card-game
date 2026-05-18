@@ -261,6 +261,31 @@ describe("GameEngine — turn flow", () => {
     assert.equal(e.getState().discardPile.at(-1)?.id, oldCard.id);
   });
 
+  it("getDrawnCard returns the drawn card only for the current turn holder", () => {
+    const e = setup();
+    const players = turnOrder(e);
+    const pid = players[0];
+    const other = players[1];
+    assert.ok(pid);
+    assert.ok(other);
+
+    // Before any draw, no drawn card.
+    assert.equal(e.getDrawnCard(pid), null);
+
+    e.processEvent(pid, "DRAW_CARD", { source: "deck" });
+
+    // Active player sees the drawn card.
+    const drawn = e.getDrawnCard(pid);
+    assert.ok(drawn);
+    assert.ok(typeof drawn.id === "string");
+    // Non-active players see nothing.
+    assert.equal(e.getDrawnCard(other), null);
+
+    // After discard, drawn card clears.
+    e.processEvent(pid, "DISCARD_DRAWN", undefined);
+    assert.equal(e.getDrawnCard(pid), null);
+  });
+
   it("rejects draw twice without discard", () => {
     const e = setup();
     const players = turnOrder(e);

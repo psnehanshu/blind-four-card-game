@@ -97,6 +97,19 @@ export class GameEngine {
     return structuredClone(this.eventLog);
   }
 
+  /**
+   * The card the current player drew this turn (deck or discard), before they
+   * have replaced or discarded it. Returns null unless `playerId` is the
+   * current turn holder AND a draw is pending. The drawn card is private to
+   * the active player — server-authoritative info exposed only to them.
+   */
+  getDrawnCard(playerId: string): Card | null {
+    const currentPlayer = this.game.players[this.game.currentTurn];
+    if (!currentPlayer || currentPlayer.id !== playerId) return null;
+    if (!this.drawnCard) return null;
+    return structuredClone(this.drawnCard);
+  }
+
   /** What events this player can perform right now. */
   getValidEvents(playerId: string): ProposedEventType[] {
     const valid: ProposedEventType[] = [];

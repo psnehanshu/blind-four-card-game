@@ -1,0 +1,384 @@
+:root {
+  color-scheme: light dark;
+  --bg: #101418;
+  --fg: #e7ecf2;
+  --muted: #8b95a3;
+  --accent: #3d8bff;
+  --accent-hover: #5a9eff;
+  --ghost-border: #2a323c;
+  --card-bg: #f5f1e6;
+  --card-fg: #1a1a1a;
+  --card-red: #c0392b;
+  --card-back: #1e3a8a;
+  --error: #ff6b6b;
+  --shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  font-family:
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    Roboto,
+    sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+}
+
+.screen {
+  min-height: 100vh;
+  padding: 24px 20px 48px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+h1 {
+  margin: 0;
+  font-size: 32px;
+  letter-spacing: -0.5px;
+}
+
+h2 {
+  margin: 0;
+  font-size: 24px;
+}
+
+h3 {
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  color: var(--muted);
+}
+
+.muted {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.error {
+  color: var(--error);
+  background: rgba(255, 107, 107, 0.1);
+  border: 1px solid rgba(255, 107, 107, 0.4);
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+/* ───────── buttons ───────── */
+
+button {
+  font: inherit;
+  cursor: pointer;
+  border: none;
+  border-radius: 10px;
+  padding: 10px 16px;
+  background: #1e2630;
+  color: var(--fg);
+  transition: background 120ms ease;
+}
+
+button:hover:not(:disabled) {
+  background: #28323e;
+}
+
+button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+button.primary {
+  background: var(--accent);
+  color: white;
+  font-weight: 600;
+}
+
+button.primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+button.ghost {
+  background: transparent;
+  border: 1px solid var(--ghost-border);
+  color: var(--fg);
+}
+
+button.big {
+  padding: 14px 24px;
+  font-size: 16px;
+}
+
+button.small {
+  padding: 6px 10px;
+  font-size: 13px;
+}
+
+button.slot-btn {
+  padding: 0;
+  background: transparent;
+  border-radius: 12px;
+}
+
+button.slot-btn:hover:not(:disabled) {
+  background: transparent;
+  transform: translateY(-2px);
+}
+
+/* ───────── form blocks ───────── */
+
+.form-block {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.form-block input {
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--ghost-border);
+  background: #1a2028;
+  color: var(--fg);
+  font: inherit;
+}
+
+.player-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.player-list li {
+  display: flex;
+  gap: 8px;
+}
+
+.player-list input {
+  flex: 1;
+}
+
+/* ───────── cards ───────── */
+
+.card-slot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.card-label {
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 1px;
+}
+
+.card {
+  background: var(--card-bg);
+  color: var(--card-fg);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  font-weight: 700;
+}
+
+.card-sm {
+  width: 44px;
+  height: 64px;
+  font-size: 14px;
+}
+
+.card-md {
+  width: 70px;
+  height: 100px;
+  font-size: 22px;
+}
+
+.card-lg {
+  width: 90px;
+  height: 128px;
+  font-size: 28px;
+}
+
+.card-red {
+  color: var(--card-red);
+}
+
+.card-hidden {
+  background: var(--card-back);
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.card-locked {
+  outline: 2px solid #f5c542;
+  outline-offset: 2px;
+}
+
+.card-rank {
+  display: block;
+  line-height: 1;
+}
+
+.card-suit {
+  font-size: 1.4em;
+  line-height: 1;
+  margin-top: 4px;
+}
+
+.card-value {
+  font-size: 0.8em;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.card-back {
+  font-size: 1.6em;
+  opacity: 0.6;
+}
+
+.card-lock-badge {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  background: #f5c542;
+  color: #1a1a1a;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 5px;
+  border-radius: 4px;
+  letter-spacing: 0.5px;
+}
+
+/* ───────── hand layout ───────── */
+
+.hand {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: center;
+}
+
+.hand.small {
+  gap: 6px;
+}
+
+/* ───────── pass-device gate ───────── */
+
+.gate {
+  justify-content: center;
+}
+
+.gate-context {
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  font-size: 12px;
+  color: var(--muted);
+  margin: 0;
+}
+
+.gate-name {
+  font-size: 36px;
+  margin: 0;
+}
+
+/* ───────── turn ───────── */
+
+.turn-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+
+.opponents,
+.center-row,
+.my-hand,
+.end-actions,
+.placeholder {
+  width: 100%;
+}
+
+.opponent-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.opponent {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.opponent-name {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.center-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  justify-content: center;
+  align-items: flex-end;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 16px;
+  border-radius: 12px;
+}
+
+.pile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.pile-label {
+  font-size: 12px;
+  color: var(--muted);
+  letter-spacing: 0.5px;
+}
+
+.pile.drawn .card {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.end-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+
+.placeholder {
+  background: rgba(245, 197, 66, 0.1);
+  border: 1px solid rgba(245, 197, 66, 0.3);
+  border-radius: 10px;
+  padding: 14px;
+  color: var(--fg);
+  font-size: 14px;
+}
+
+.reveal,
+.done {
+  justify-content: center;
+}

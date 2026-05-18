@@ -4,34 +4,45 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project scope
 
-This is **`blind-four`** — the full game, not just the rules. The repo will grow to host multiple **form factors** (web, mobile, terminal UI, …), all sharing a single deterministic game engine. As of this writing only the engine exists.
+This is **`blind-four`** — the full game, not just the rules. The repo will grow to host multiple **form factors** (web, mobile, terminal UI, …), all sharing a single deterministic game engine. As of this writing the engine and a `web/` form factor exist.
 
 ## Repository layout
 
 ```
 engine/          Core game engine (TypeScript, no I/O). Shared by every form factor.
 engine/SPEC.md   Authoritative rules spec.
-<form-factor>/   Each frontend lives in its own top-level folder (web/, mobile/, terminal/, …).
+web/             React + Vite hot-seat web UI. Imports the engine via relative path.
+<form-factor>/   Each new frontend lives in its own top-level folder (mobile/, terminal/, …).
                  Add new ones as siblings of engine/.
 ```
 
-Form-factor folders don't exist yet. When adding one:
+When adding a new form factor:
 
 - give it its own folder and `package.json` (or convert the root to npm workspaces if multiple land)
 - consume the engine via a relative import; **never duplicate game logic**
 - treat the engine as server-authoritative even if the form factor runs everything locally — that's what makes a future networked client cheap
+- give it its own `tsconfig.json` (root tsconfig is engine-only — JSX/DOM needs per-form-factor compiler settings)
 
 ## Commands
 
-Current scripts target the engine. Expect them to evolve as form factors land.
+Root scripts target the engine. Form factors have their own scripts in their own folder.
 
 - `npm test` — run all engine tests via `tsx --test engine/*.test.ts`
-- `npm run typecheck` — `tsc --noEmit` (currently only includes `engine/**/*.ts`; extend `tsconfig.json#include` when adding a form factor)
-- `npm run lint` — ESLint
-- `npm run format` / `npm run format:check` — Prettier write / check
+- `npm run typecheck` — `tsc --noEmit` (engine-only — form factors carry their own tsconfig)
+- `npm run lint` — ESLint (root config ignores `web/dist`, `web/node_modules`, `web/.vite`)
+- `npm run format` / `npm run format:check` — Prettier write / check (also formats `web/src`)
 - `npm run sanity` — typecheck + lint + format:check + test, in that order. **Run this after every change.**
 - Run a single test file: `tsx --test engine/rng.test.ts`
 - Run a single test by name: `tsx --test --test-name-pattern="same seed" engine/*.test.ts`
+
+### Web form factor
+
+From `web/`:
+
+- `npm install` (one-time)
+- `npm run dev` — Vite dev server on `:5173`
+- `npm run typecheck` — `tsc --noEmit` against `web/tsconfig.json`
+- `npm run build` / `npm run preview`
 
 ## Architecture
 
