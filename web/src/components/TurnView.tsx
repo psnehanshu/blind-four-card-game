@@ -5,6 +5,8 @@ import type { Dispatch } from "../game/useEngine.js";
 import { CardView } from "./CardView.js";
 import { PowerView } from "./PowerView.js";
 import { Dialog } from "./Dialog.js";
+import { DeckStack, DiscardStack } from "./Pile.js";
+import { tiltForSlot } from "../util/rand.js";
 
 interface PeekDisplay {
   playerName: string;
@@ -30,7 +32,6 @@ export function TurnView({ engine, playerId, dispatch, onTurnEnd, onExit }: Prop
   const me = visible.players.find((p) => p.id === playerId);
   const meName = me?.name ?? playerId;
   const opponents = visible.players.filter((p) => p.id !== playerId);
-  const discardTop = visible.discardPile.at(-1);
 
   function tryDispatch<T extends ProposedEventType>(type: T, payload: EventPayloadMap[T]) {
     setError(null);
@@ -102,7 +103,14 @@ export function TurnView({ engine, playerId, dispatch, onTurnEnd, onExit }: Prop
                 <span className="opponent-name">{op.name}</span>
                 <div className="hand small">
                   {Array.from({ length: op.handSize }).map((_, i) => (
-                    <CardView key={i} hidden locked={locks.has(i)} label={`#${i + 1}`} size="sm" />
+                    <CardView
+                      key={i}
+                      hidden
+                      locked={locks.has(i)}
+                      label={`#${i + 1}`}
+                      size="sm"
+                      tilt={tiltForSlot(op.id, i)}
+                    />
                   ))}
                 </div>
               </div>
@@ -114,7 +122,7 @@ export function TurnView({ engine, playerId, dispatch, onTurnEnd, onExit }: Prop
       <section className="center-row">
         <div className="pile">
           <span className="pile-label">Deck ({visible.deckSize})</span>
-          <CardView hidden size="md" />
+          <DeckStack size={visible.deckSize} />
           <button
             type="button"
             className="primary"
@@ -127,7 +135,7 @@ export function TurnView({ engine, playerId, dispatch, onTurnEnd, onExit }: Prop
 
         <div className="pile">
           <span className="pile-label">Discard ({visible.discardPile.length})</span>
-          {discardTop ? <CardView card={discardTop} size="md" /> : <CardView hidden size="md" />}
+          <DiscardStack cards={visible.discardPile} />
           <button
             type="button"
             className="primary"
@@ -156,14 +164,15 @@ export function TurnView({ engine, playerId, dispatch, onTurnEnd, onExit }: Prop
         <div className="hand">
           {Array.from({ length: handSize }).map((_, i) => {
             const locked = myLocks.has(i);
+            const tilt = tiltForSlot(playerId, i);
             if (inDecision && !locked) {
               return (
                 <button key={i} type="button" className="slot-btn" onClick={() => replaceSlot(i)}>
-                  <CardView hidden locked={locked} label={`#${i + 1}`} size="lg" />
+                  <CardView hidden locked={locked} label={`#${i + 1}`} size="lg" tilt={tilt} />
                 </button>
               );
             }
-            return <CardView key={i} hidden locked={locked} label={`#${i + 1}`} size="lg" />;
+            return <CardView key={i} hidden locked={locked} label={`#${i + 1}`} size="lg" tilt={tilt} />;
           })}
         </div>
       </section>
@@ -180,7 +189,13 @@ export function TurnView({ engine, playerId, dispatch, onTurnEnd, onExit }: Prop
             <h3>Peek result — {peekDisplay.playerName}</h3>
             <div className="hand">
               {peekDisplay.cards.map((c) => (
-                <CardView key={c.index} card={c.card} label={`#${c.index + 1}`} size="lg" />
+                <CardView
+                  key={c.index}
+                  card={c.card}
+                  label={`#${c.index + 1}`}
+                  size="lg"
+                  tilt={tiltForSlot(peekDisplay.playerName, c.index)}
+                />
               ))}
             </div>
             <p className="muted">Only you can see this. Memorize it before continuing.</p>

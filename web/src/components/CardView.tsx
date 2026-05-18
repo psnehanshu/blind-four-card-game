@@ -19,12 +19,15 @@ interface Props {
   label?: string;
   /** Visual size. */
   size?: "sm" | "md" | "lg";
+  /** Rotation in degrees applied to the card face (not the label). */
+  tilt?: number;
 }
 
-export function CardView({ card, hidden, locked, label, size = "md" }: Props) {
+export function CardView({ card, hidden, locked, label, size = "md", tilt }: Props) {
   const classes = ["card", `card-${size}`];
   if (hidden) classes.push("card-hidden");
   if (locked) classes.push("card-locked");
+  const cardStyle = tilt !== undefined && tilt !== 0 ? { transform: `rotate(${tilt}deg)` } : undefined;
 
   let body;
   if (hidden || !card) {
@@ -50,7 +53,7 @@ export function CardView({ card, hidden, locked, label, size = "md" }: Props) {
   return (
     <div className="card-slot">
       {label && <span className="card-label">{label}</span>}
-      <div className={classes.join(" ")}>
+      <div className={classes.join(" ")} style={cardStyle}>
         {body}
         {locked && <span className="card-lock-badge">LOCK</span>}
       </div>

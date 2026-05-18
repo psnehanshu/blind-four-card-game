@@ -1,5 +1,6 @@
 import type { GameEngine } from "../../../engine/game-engine.js";
 import { CardView } from "./CardView.js";
+import { tiltForSlot } from "../util/rand.js";
 
 interface Props {
   engine: GameEngine;
@@ -53,7 +54,14 @@ export function FinalReveal({ engine, onExit }: Props) {
               </div>
               <div className="hand">
                 {player.hand.map((pc, i) => (
-                  <CardView key={i} card={pc.card} label={`#${i + 1}`} size="md" locked={locks.has(i)} />
+                  <CardView
+                    key={i}
+                    card={pc.card}
+                    label={`#${i + 1}`}
+                    size="md"
+                    locked={locks.has(i)}
+                    tilt={tiltForSlot(player.id, i)}
+                  />
                 ))}
               </div>
             </div>

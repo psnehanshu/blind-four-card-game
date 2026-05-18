@@ -4,6 +4,7 @@ import type { BasePowerAction, PeekResult, PowerAction, Rank, VisibleGameState }
 import { HAND_SIZE } from "../../../engine/types.js";
 import type { Dispatch } from "../game/useEngine.js";
 import { CardView } from "./CardView.js";
+import { tiltForSlot } from "../util/rand.js";
 
 interface Props {
   engine: GameEngine;
@@ -343,7 +344,7 @@ function CardSlotPicker({
             disabled={disabled}
             onClick={() => onPick(i)}
           >
-            <CardView hidden locked={locked} label={`#${i + 1}`} size="md" />
+            <CardView hidden locked={locked} label={`#${i + 1}`} size="md" tilt={tiltForSlot(targetPlayerId, i)} />
           </button>
         );
       })}

@@ -1,6 +1,7 @@
 import type { GameEngine } from "../../../engine/game-engine.js";
 import type { Dispatch } from "../game/useEngine.js";
 import { CardView } from "./CardView.js";
+import { tiltForSlot } from "../util/rand.js";
 
 interface Props {
   engine: GameEngine;
@@ -31,7 +32,14 @@ export function InitialReveal({ engine, playerId, dispatch, onDone }: Props) {
 
       <div className="hand">
         {hand.map(({ index, card }) => (
-          <CardView key={index} card={card.card} label={`#${index + 1}`} locked={card.locked} size="lg" />
+          <CardView
+            key={index}
+            card={card.card}
+            label={`#${index + 1}`}
+            locked={card.locked}
+            size="lg"
+            tilt={tiltForSlot(playerId, index)}
+          />
         ))}
       </div>
 
