@@ -381,6 +381,8 @@ export class GameEngine {
     }
 
     if (action.power === "shuffle") {
+      const currentPlayerId = this.game.players[this.game.currentTurn]?.id;
+      if (action.targetPlayerId === currentPlayerId) return "Shuffle target cannot be self";
       const target = this.game.players.find((p) => p.id === action.targetPlayerId);
       if (!target) return "Invalid target player";
       return null;

@@ -5,6 +5,7 @@ import { nextActivePlayerId } from "../game/activePlayer.js";
 import { PassDeviceGate } from "./PassDeviceGate.js";
 import { InitialReveal } from "./InitialReveal.js";
 import { TurnView } from "./TurnView.js";
+import { FinalReveal } from "./FinalReveal.js";
 
 interface Props {
   engine: GameEngine;
@@ -20,11 +21,15 @@ export function GameShell({ engine, onExit }: Props) {
   const activeId = nextActivePlayerId(engine);
   const activeName = state.players.find((p) => p.id === activeId)?.name ?? activeId ?? "—";
 
-  if (state.state === "finished" || activeId === null) {
+  if (state.state === "finished") {
+    return <FinalReveal engine={engine} onExit={onExit} />;
+  }
+
+  if (activeId === null) {
     return (
       <div className="screen done">
-        <h2>Game over</h2>
-        <p className="muted">Final reveal isn&rsquo;t implemented yet in this slice.</p>
+        <h2>No active player</h2>
+        <p className="muted">The game is in an unexpected state.</p>
         <button type="button" className="primary big" onClick={onExit}>
           Back to lobby
         </button>

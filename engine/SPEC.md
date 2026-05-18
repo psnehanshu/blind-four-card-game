@@ -46,6 +46,7 @@ Locked cards use visible face-up King/Joker markers.
 ## Jack — Shuffle
 
 - shuffle target player's **unlocked** card positions randomly
+- target must be another player (not self)
 - locked positions stay put
 - cards remain hidden
 - ownership preserved

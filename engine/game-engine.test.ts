@@ -855,6 +855,20 @@ describe("GameEngine — powers", () => {
     assert.match(r.error ?? "", /Invalid target player/);
   });
 
+  it("Shuffle (J) — rejects targeting self", () => {
+    const e = startGame({ seed: 37 });
+    const pid = turnOrder(e)[0];
+    assert.ok(pid);
+    e.processEvent(pid, "DRAW_CARD", { source: "deck" });
+    e.processEvent(pid, "DISCARD_DRAWN", undefined);
+
+    const r = e.processEvent(pid, "USE_POWER", {
+      power: "shuffle",
+      targetPlayerId: pid,
+    });
+    assert.match(r.error ?? "", /Shuffle target cannot be self/);
+  });
+
   it("Swap (Q) — rejects unknown source/target players", () => {
     const e = startGame({ seed: 9 });
     const pid = turnOrder(e)[0];
@@ -1073,6 +1087,7 @@ describe("GameEngine — showdown", () => {
         ];
         const firstOther = otherPlayers[0];
         if (firstOther) {
+          attempts.push({ power: "shuffle", targetPlayerId: firstOther });
           attempts.push({
             power: "swap",
             sourcePlayerId: pid,
@@ -1117,6 +1132,7 @@ describe("GameEngine — showdown", () => {
       ];
       const firstOther = otherPlayers[0];
       if (firstOther) {
+        attempts.push({ power: "shuffle", targetPlayerId: firstOther });
         attempts.push({
           power: "swap",
           sourcePlayerId: pid0,
@@ -1165,6 +1181,7 @@ describe("GameEngine — showdown", () => {
           { power: "joker", mimicRank: "10", action: { power: "peek", target: "own" } },
         ];
         if (firstOther) {
+          attempts.push({ power: "shuffle", targetPlayerId: firstOther });
           attempts.push({
             power: "swap",
             sourcePlayerId: pid,
@@ -1190,7 +1207,7 @@ describe("GameEngine — showdown", () => {
     if (e.getValidEvents("alice").includes("USE_POWER")) {
       const attempts: PowerAction[] = [
         { power: "peek", target: "own" },
-        { power: "shuffle", targetPlayerId: "alice" },
+        { power: "shuffle", targetPlayerId: "bob" },
         { power: "lock", targetPlayerId: "alice", cardIndex: 0 },
         { power: "joker", mimicRank: "10", action: { power: "peek", target: "own" } },
         { power: "swap", sourcePlayerId: "alice", sourceCardIndex: 0, targetPlayerId: "bob", targetCardIndex: 0 },
@@ -1225,13 +1242,14 @@ describe("GameEngine — event log & replay", () => {
   function runSomeTurns(engine: GameEngine): void {
     const players = turnOrder(engine);
     const pid = players[0];
-    assert.ok(pid);
+    const other = players[1];
+    assert.ok(pid && other);
     engine.processEvent(pid, "DRAW_CARD", { source: "deck" });
     engine.processEvent(pid, "DISCARD_DRAWN", undefined);
     if (engine.getValidEvents(pid).includes("USE_POWER")) {
       const attempts: PowerAction[] = [
         { power: "peek", target: "own" },
-        { power: "shuffle", targetPlayerId: pid },
+        { power: "shuffle", targetPlayerId: other },
         { power: "lock", targetPlayerId: pid, cardIndex: 0 },
         {
           power: "joker",
@@ -1276,14 +1294,16 @@ describe("GameEngine — event log & replay", () => {
 
   it("committed event sequence numbers are monotonic from zero", () => {
     const e = startGame({ seed: 42 });
-    const pid = turnOrder(e)[0];
-    assert.ok(pid);
+    const players = turnOrder(e);
+    const pid = players[0];
+    const other = players[1];
+    assert.ok(pid && other);
     e.processEvent(pid, "DRAW_CARD", { source: "deck" });
     e.processEvent(pid, "DISCARD_DRAWN", undefined);
     if (e.getValidEvents(pid).includes("USE_POWER")) {
       const attempts: PowerAction[] = [
         { power: "peek", target: "own" },
-        { power: "shuffle", targetPlayerId: pid },
+        { power: "shuffle", targetPlayerId: other },
         { power: "lock", targetPlayerId: pid, cardIndex: 0 },
         { power: "joker", mimicRank: "10", action: { power: "peek", target: "own" } },
       ];
@@ -1356,6 +1376,7 @@ describe("GameEngine — event log & replay", () => {
           { power: "joker", mimicRank: "10", action: { power: "peek", target: "own" } },
         ];
         if (firstOther) {
+          attempts.push({ power: "shuffle", targetPlayerId: firstOther });
           attempts.push({
             power: "swap",
             sourcePlayerId: pid,
@@ -1380,7 +1401,7 @@ describe("GameEngine — event log & replay", () => {
     if (e1.getValidEvents("alice").includes("USE_POWER")) {
       const attempts: PowerAction[] = [
         { power: "peek", target: "own" },
-        { power: "shuffle", targetPlayerId: "alice" },
+        { power: "shuffle", targetPlayerId: "bob" },
         { power: "lock", targetPlayerId: "alice", cardIndex: 0 },
         { power: "joker", mimicRank: "10", action: { power: "peek", target: "own" } },
         { power: "swap", sourcePlayerId: "alice", sourceCardIndex: 0, targetPlayerId: "bob", targetCardIndex: 0 },
@@ -1574,6 +1595,7 @@ describe("GameEngine — visibility", () => {
         { power: "joker", mimicRank: "10", action: { power: "peek", target: "own" } },
       ];
       if (firstOther) {
+        attempts.push({ power: "shuffle", targetPlayerId: firstOther });
         attempts.push({
           power: "swap",
           sourcePlayerId: pid,
@@ -1626,6 +1648,7 @@ describe("GameEngine — visibility", () => {
         { power: "joker", mimicRank: "10", action: { power: "peek", target: "own" } },
       ];
       if (firstOther) {
+        attempts.push({ power: "shuffle", targetPlayerId: firstOther });
         attempts.push({
           power: "swap",
           sourcePlayerId: pid,
@@ -1724,6 +1747,7 @@ describe("GameEngine — edge cases", () => {
         { power: "joker", mimicRank: "10", action: { power: "peek", target: "own" } },
       ];
       if (firstOther) {
+        attempts.push({ power: "shuffle", targetPlayerId: firstOther });
         attempts.push({
           power: "swap",
           sourcePlayerId: pid,
@@ -1885,6 +1909,19 @@ describe("GameEngine — Joker power", () => {
     assert.deepEqual(newHand, originalHand);
   });
 
+  it("Mimic Shuffle — rejects targeting self", () => {
+    const { engine, playerId } = setupJoker();
+    const result = engine.processEvent(playerId, "USE_POWER", {
+      power: "joker",
+      mimicRank: "J",
+      action: {
+        power: "shuffle",
+        targetPlayerId: playerId,
+      },
+    });
+    assert.match(result.error ?? "", /Shuffle target cannot be self/);
+  });
+
   it("Mimic Lock — works correctly", () => {
     const { engine, playerId } = setupJoker();
 
@@ -2002,6 +2039,7 @@ describe("GameEngine — winners", () => {
       ];
       const firstOther = others[0];
       if (firstOther) {
+        attempts.push({ power: "shuffle", targetPlayerId: firstOther });
         attempts.push({
           power: "swap",
           sourcePlayerId: pid,
@@ -2032,6 +2070,7 @@ describe("GameEngine — winners", () => {
       ];
       const firstOther = others[0];
       if (firstOther) {
+        attempts.push({ power: "shuffle", targetPlayerId: firstOther });
         attempts.push({
           power: "swap",
           sourcePlayerId: callerId,

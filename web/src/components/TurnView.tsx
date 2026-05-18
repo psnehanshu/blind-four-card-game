@@ -1,8 +1,15 @@
 import { useState } from "react";
 import type { GameEngine } from "../../../engine/game-engine.js";
-import type { Card, EventPayloadMap, ProposedEventType } from "../../../engine/types.js";
+import type { Card, EventPayloadMap, PeekResult, ProposedEventType } from "../../../engine/types.js";
 import type { Dispatch } from "../game/useEngine.js";
 import { CardView } from "./CardView.js";
+import { PowerView } from "./PowerView.js";
+import { Dialog } from "./Dialog.js";
+
+interface PeekDisplay {
+  playerName: string;
+  cards: PeekResult["cards"];
+}
 
 interface Props {
   engine: GameEngine;
@@ -18,6 +25,7 @@ export function TurnView({ engine, playerId, dispatch, onTurnEnd, onExit }: Prop
   const valid = engine.getValidEvents(playerId);
   const drawn: Card | null = engine.getDrawnCard(playerId);
   const [error, setError] = useState<string | null>(null);
+  const [peekDisplay, setPeekDisplay] = useState<PeekDisplay | null>(null);
 
   const me = visible.players.find((p) => p.id === playerId);
   const meName = me?.name ?? playerId;
@@ -72,6 +80,15 @@ export function TurnView({ engine, playerId, dispatch, onTurnEnd, onExit }: Prop
           Exit to lobby
         </button>
       </header>
+
+      {visible.state === "showdown" && (
+        <div className="showdown-banner">
+          <strong>
+            Showdown called by {visible.players.find((p) => p.id === visible.callerId)?.name ?? visible.callerId}.
+          </strong>
+          <span> This is your final turn.</span>
+        </div>
+      )}
 
       <section className="opponents">
         <h3>Opponents</h3>
@@ -151,14 +168,28 @@ export function TurnView({ engine, playerId, dispatch, onTurnEnd, onExit }: Prop
         </div>
       </section>
 
-      {inPower && (
-        <section className="placeholder">
-          <p>
-            You discarded a power card. Power resolution isn&rsquo;t implemented yet — exit to lobby to start a new game,
-            or refresh to retry with a different seed.
-          </p>
-        </section>
-      )}
+      <Dialog open={inPower && !peekDisplay}>
+        {inPower && !peekDisplay && (
+          <PowerView engine={engine} playerId={playerId} dispatch={dispatch} onResolved={setPeekDisplay} />
+        )}
+      </Dialog>
+
+      <Dialog open={!!peekDisplay}>
+        {peekDisplay && (
+          <section className="peek-result">
+            <h3>Peek result — {peekDisplay.playerName}</h3>
+            <div className="hand">
+              {peekDisplay.cards.map((c) => (
+                <CardView key={c.index} card={c.card} label={`#${c.index + 1}`} size="lg" />
+              ))}
+            </div>
+            <p className="muted">Only you can see this. Memorize it before continuing.</p>
+            <button type="button" className="primary big" onClick={() => setPeekDisplay(null)}>
+              Done
+            </button>
+          </section>
+        )}
+      </Dialog>
 
       {(canEnd || canShowdown) && (
         <section className="end-actions">

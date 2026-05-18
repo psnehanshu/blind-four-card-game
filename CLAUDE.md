@@ -65,7 +65,7 @@ From `web/`:
 **Powers** (`USE_POWER` payload is a `PowerAction` discriminated union):
 
 - 10 = peek (own = all 4 own cards; opponent = one chosen card via `opponentCardIndex`, must not be self — locked cards may be peeked)
-- J = shuffle (target player's unlocked positions; locks preserved in place)
+- J = shuffle (target player's unlocked positions, target must not be self; locks preserved in place)
 - Q = swap (two **different** players, both cards unlocked)
 - K = lock (target's card; King is removed from discard and placed as a face-up `LockMarker`, never re-enters discard)
 - Joker = wild; mimics another rank via `mimicRank` + nested `action`. Joker-as-K behaves identically to K.
