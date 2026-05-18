@@ -329,12 +329,12 @@ function CardSlotPicker({
 }) {
   const target = visible.players.find((p) => p.id === targetPlayerId);
   if (!target) return null;
-  const locks = new Set(target.lockedCards.map((lc) => lc.index));
+  const markers = new Map(target.lockedCards.map((lc) => [lc.index, lc.markerCard]));
   return (
     <div className="slot-picker">
       {Array.from({ length: HAND_SIZE }).map((_, i) => {
-        const locked = locks.has(i);
-        const disabled = disableLocked && locked;
+        const marker = markers.get(i);
+        const disabled = disableLocked && !!marker;
         const selected = selectedIndex === i;
         return (
           <button
@@ -344,7 +344,7 @@ function CardSlotPicker({
             disabled={disabled}
             onClick={() => onPick(i)}
           >
-            <CardView hidden locked={locked} label={`#${i + 1}`} size="md" tilt={tiltForSlot(targetPlayerId, i)} />
+            <CardView hidden lockMarker={marker} label={`#${i + 1}`} size="md" tilt={tiltForSlot(targetPlayerId, i)} />
           </button>
         );
       })}

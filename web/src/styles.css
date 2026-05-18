@@ -274,7 +274,30 @@ button.slot-btn:hover:not(:disabled) {
   opacity: 0.6;
 }
 
-.card-lock-badge {
+/* Stack wrapper so the K/Joker lock marker can sit on top of its locked card. */
+.card-stack {
+  position: relative;
+  display: inline-flex;
+}
+
+.lock-marker {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 5;
+  filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.55));
+  transform-origin: 50% 50%;
+}
+
+.lock-marker .card {
+  /* Yellow halo so it reads as a special "lock" overlay even at a glance. */
+  box-shadow:
+    0 0 0 2px #f5c542,
+    0 6px 12px rgba(0, 0, 0, 0.45);
+}
+
+/* Compact lock badge for the final reveal — doesn't hide the locked card. */
+.lock-label-badge {
   position: absolute;
   top: -8px;
   right: -8px;
@@ -282,9 +305,12 @@ button.slot-btn:hover:not(:disabled) {
   color: #1a1a1a;
   font-size: 9px;
   font-weight: 700;
-  padding: 2px 5px;
+  padding: 2px 6px;
   border-radius: 4px;
   letter-spacing: 0.5px;
+  white-space: nowrap;
+  z-index: 6;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
 }
 
 /* ───────── hand layout ───────── */
@@ -565,6 +591,77 @@ button.slot-btn:hover:not(:disabled) {
   flex-direction: column;
   gap: 12px;
   align-items: center;
+}
+
+/* ───────── flight layer ───────── */
+
+.flight-layer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1000;
+}
+
+.flight-card {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 70px;
+  height: 100px;
+  pointer-events: none;
+  will-change: transform;
+  filter: drop-shadow(0 10px 14px rgba(0, 0, 0, 0.5));
+}
+
+/* Placeholder reserves the same footprint as the drawn pile so the row layout
+   doesn't reflow when the drawn slot mounts/unmounts. */
+.placeholder-slot {
+  visibility: hidden;
+  min-width: 100px; /* card-md width plus padding */
+  min-height: 140px;
+}
+
+/* ───────── animation effects ───────── */
+
+@keyframes swap-pulse-flash {
+  0% {
+    box-shadow: 0 0 0 0 rgba(61, 139, 255, 0.55);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(61, 139, 255, 0);
+    transform: scale(1.06);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(61, 139, 255, 0);
+    transform: scale(1);
+  }
+}
+
+.swap-pulse .card {
+  animation: swap-pulse-flash 0.6s ease-out;
+}
+
+.peek-flip {
+  width: 90px;
+  height: 128px;
+  position: relative;
+  transform-style: preserve-3d;
+  perspective: 1200px;
+}
+
+.peek-flip-face,
+.peek-flip-back {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.peek-flip-back {
+  transform: rotateY(180deg);
 }
 
 /* ───────── showdown / final reveal ───────── */

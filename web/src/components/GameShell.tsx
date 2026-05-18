@@ -13,7 +13,7 @@ interface Props {
 }
 
 export function GameShell({ engine, onExit }: Props) {
-  const { dispatch, version: _version } = useEngine(engine);
+  const { dispatch, version: _version, cue } = useEngine(engine);
   // Always gated at start of a turn / reveal; cleared once the active player taps through.
   const [gateClosed, setGateClosed] = useState(true);
 
@@ -52,6 +52,7 @@ export function GameShell({ engine, onExit }: Props) {
       engine={engine}
       playerId={activeId}
       dispatch={dispatch}
+      cue={cue}
       onTurnEnd={() => setGateClosed(true)}
       onExit={onExit}
     />

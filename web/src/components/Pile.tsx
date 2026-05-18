@@ -38,7 +38,9 @@ export function DeckStack({ size }: { size: number }) {
 /**
  * Discard pile rendered as a disorganized stack — the last few cards are
  * shown at stable per-card random rotations and offsets. The topmost card
- * is nearly upright so its face is clear.
+ * is nearly upright so its face is clear. No mount/unmount animations —
+ * the FlightLayer in TurnView provides the entry/exit motion for cards
+ * moving in or out of the discard pile.
  */
 export function DiscardStack({ cards }: { cards: Card[] }) {
   if (cards.length === 0) {
@@ -61,10 +63,7 @@ export function DiscardStack({ cards }: { cards: Card[] }) {
           <div
             key={card.id}
             className="pile-card"
-            style={{
-              transform: `translate(${tx}px, ${ty}px) rotate(${rot}deg)`,
-              zIndex: i,
-            }}
+            style={{ transform: `translate(${tx}px, ${ty}px) rotate(${rot}deg)`, zIndex: i }}
           >
             <CardView card={card} size="md" />
           </div>

@@ -12,23 +12,23 @@ export function FinalReveal({ engine, onExit }: Props) {
   const game = engine.getState();
   const winners = new Set(engine.winners.map((w) => w.id));
   const callerName = game.players.find((p) => p.id === game.callerId)?.name;
-  const lockMarkersByPlayer = new Map<string, Set<number>>();
+  const markersByPlayer = new Map<string, Map<number, import("../../../engine/types.js").Card>>();
   // The live Game type doesn't expose lockMarkers; pull them via any player's visible state
   // (lockMarkers are public, so any playerId works).
   const anyPlayerId = game.players[0]?.id;
   if (anyPlayerId) {
     const vs = engine.getVisibleState(anyPlayerId);
     for (const lm of vs.lockMarkers) {
-      const set = lockMarkersByPlayer.get(lm.playerId) ?? new Set<number>();
-      set.add(lm.cardIndex);
-      lockMarkersByPlayer.set(lm.playerId, set);
+      const map = markersByPlayer.get(lm.playerId) ?? new Map();
+      map.set(lm.cardIndex, lm.markerCard);
+      markersByPlayer.set(lm.playerId, map);
     }
   }
 
   const rows = game.players.map((player) => {
     const score = player.hand.reduce((sum, pc) => sum + pc.card.value, 0);
-    const locks = lockMarkersByPlayer.get(player.id) ?? new Set<number>();
-    return { player, score, locks };
+    const markers = markersByPlayer.get(player.id) ?? new Map();
+    return { player, score, markers };
   });
 
   const lowestScore = Math.min(...rows.map((r) => r.score));
@@ -39,7 +39,7 @@ export function FinalReveal({ engine, onExit }: Props) {
       {callerName && <p className="muted">{callerName} called showdown.</p>}
 
       <section className="final-results">
-        {rows.map(({ player, score, locks }) => {
+        {rows.map(({ player, score, markers }) => {
           const isWinner = winners.has(player.id);
           const isCaller = player.id === game.callerId;
           return (
@@ -59,7 +59,8 @@ export function FinalReveal({ engine, onExit }: Props) {
                     card={pc.card}
                     label={`#${i + 1}`}
                     size="md"
-                    locked={locks.has(i)}
+                    lockMarker={markers.get(i)}
+                    markerStyle="label"
                     tilt={tiltForSlot(player.id, i)}
                   />
                 ))}
