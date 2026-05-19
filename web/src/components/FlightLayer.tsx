@@ -16,6 +16,9 @@ export interface Flight {
   to: { x: number; y: number };
   /** If provided, the card flips at the end of the flight to reveal this face. Used for deck draws. */
   revealAt?: Card | null;
+  /** Pixels to lift the arc apex above the higher of from/to. Defaults to 50.
+   *  Swap flights vary this so two cards crossing don't trace identical arcs. */
+  arcLift?: number;
   onComplete: () => void;
 }
 
@@ -39,7 +42,7 @@ function FlyingCard({ flight }: { flight: Flight }) {
 
   // dx/dy of the arc midpoint; a slight arc upward feels more natural than a straight line.
   const midX = (fromX + toX) / 2;
-  const midY = Math.min(fromY, toY) - 50;
+  const midY = Math.min(fromY, toY) - (flight.arcLift ?? 50);
 
   return (
     <motion.div

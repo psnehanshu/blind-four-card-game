@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import type { GameEngine } from "../../../engine/game-engine.js";
 import type { Card, EventPayloadMap, PeekResult, ProposedEventType } from "../../../engine/types.js";
@@ -46,12 +46,22 @@ export function TurnView({ engine, playerId, dispatch, cue, onTurnEnd, onExit }:
   const deckRef = useRef<HTMLDivElement | null>(null);
   const discardRef = useRef<HTMLDivElement | null>(null);
   const drawnRef = useRef<HTMLDivElement | null>(null);
-  const handSlotRefs = useRef<(HTMLElement | null)[]>([]);
+  // Keyed by `${playerId}-${cardIndex}` — covers every hand slot on screen
+  // (mine and opponents'), so the swap power can fly cards between any two.
+  const slotRefs = useRef<Map<string, HTMLElement | null>>(new Map());
   const flightIdRef = useRef(0);
   const [flights, setFlights] = useState<Flight[]>([]);
   // While a flight is animating the entry/exit of a slot, hide the underlying element.
   const [drawnHiddenForFlight, setDrawnHiddenForFlight] = useState(false);
   const [hideDiscardTopForFlight, setHideDiscardTopForFlight] = useState(false);
+  // Slots whose contents are visually hidden while a swap flight is in transit.
+  const [hiddenSlots, setHiddenSlots] = useState<Set<string>>(new Set());
+
+  function setSlotRef(handPlayerId: string, cardIndex: number) {
+    return (el: HTMLElement | null) => {
+      slotRefs.current.set(`${handPlayerId}-${cardIndex}`, el);
+    };
+  }
 
   function pushFlight(spec: Omit<Flight, "id" | "onComplete">, onDone: () => void) {
     const id = `flight-${++flightIdRef.current}`;
@@ -116,7 +126,8 @@ export function TurnView({ engine, playerId, dispatch, cue, onTurnEnd, onExit }:
 
   function replaceSlot(handIndex: number) {
     const drawnRect = rectCenter(drawnRef.current);
-    const handRect = rectCenter(handSlotRefs.current[handIndex] ?? null);
+    const handEl = slotRefs.current.get(`${playerId}-${handIndex}`) ?? null;
+    const handRect = rectCenter(handEl);
     const discardRect = rectCenter(discardRef.current);
     const drawnBefore = drawn;
 
@@ -163,6 +174,55 @@ export function TurnView({ engine, playerId, dispatch, cue, onTurnEnd, onExit }:
     if (tryDispatch("END_TURN", undefined)) onTurnEnd();
   }
 
+  // Swap power: when the cue lands, fly two face-down cards between the two
+  // affected slots on crossing arcs. The engine has already swapped them, so
+  // we hide both slots until each flight arrives — that way the visible card
+  // "leaves" and the new one "arrives" instead of teleporting.
+  useEffect(() => {
+    if (cue?.kind !== "swap") return;
+    const aKey = `${cue.a.playerId}-${cue.a.cardIndex}`;
+    const bKey = `${cue.b.playerId}-${cue.b.cardIndex}`;
+    const aPos = rectCenter(slotRefs.current.get(aKey) ?? null);
+    const bPos = rectCenter(slotRefs.current.get(bKey) ?? null);
+    if (!aPos || !bPos) return;
+
+    setHiddenSlots((prev) => new Set([...prev, aKey, bKey]));
+
+    const idA = `swap-${cue.nonce}-a`;
+    const idB = `swap-${cue.nonce}-b`;
+
+    const reveal = (key: string) =>
+      setHiddenSlots((prev) => {
+        const next = new Set(prev);
+        next.delete(key);
+        return next;
+      });
+
+    const flightA: Flight = {
+      id: idA,
+      card: null,
+      from: aPos,
+      to: bPos,
+      arcLift: 80,
+      onComplete: () => {
+        setFlights((prev) => prev.filter((f) => f.id !== idA));
+        reveal(bKey);
+      },
+    };
+    const flightB: Flight = {
+      id: idB,
+      card: null,
+      from: bPos,
+      to: aPos,
+      arcLift: 30,
+      onComplete: () => {
+        setFlights((prev) => prev.filter((f) => f.id !== idB));
+        reveal(aKey);
+      },
+    };
+    setFlights((prev) => [...prev, flightA, flightB]);
+  }, [cue]);
+
   function callShowdown() {
     if (tryDispatch("CALL_SHOWDOWN", undefined)) onTurnEnd();
   }
@@ -178,16 +238,6 @@ export function TurnView({ engine, playerId, dispatch, cue, onTurnEnd, onExit }:
   const inPower = valid.includes("USE_POWER");
   const canEnd = valid.includes("END_TURN");
   const canShowdown = valid.includes("CALL_SHOWDOWN");
-
-  // Slot-level animation cue helpers.
-  function slotCueClass(targetPlayerId: string, slotIndex: number): string {
-    if (!cue) return "";
-    if (cue.kind === "swap") {
-      if (cue.a.playerId === targetPlayerId && cue.a.cardIndex === slotIndex) return "swap-pulse";
-      if (cue.b.playerId === targetPlayerId && cue.b.cardIndex === slotIndex) return "swap-pulse";
-    }
-    return "";
-  }
 
   function shuffleNonceFor(handPlayerId: string): number | undefined {
     if (cue?.kind === "shuffle" && cue.targetPlayerId === handPlayerId) return cue.nonce;
@@ -237,26 +287,23 @@ export function TurnView({ engine, playerId, dispatch, cue, onTurnEnd, onExit }:
                   {Array.from({ length: op.handSize }).map((_, i) => {
                     const marker = markers.get(i);
                     const locked = !!marker;
-                    const extra = slotCueClass(op.id, i);
                     const sn = locked ? undefined : shuffleNonceFor(op.id);
+                    const hidden = hiddenSlots.has(`${op.id}-${i}`);
                     const cardView = (
-                      <CardView
-                        hidden
-                        lockMarker={marker}
-                        label={`#${i + 1}`}
-                        size="sm"
-                        tilt={tiltForSlot(op.id, i)}
-                        motionProps={extra ? { className: `card-slot ${extra}` } : undefined}
-                      />
+                      <CardView hidden lockMarker={marker} label={`#${i + 1}`} size="sm" tilt={tiltForSlot(op.id, i)} />
                     );
-                    if (!locked) {
-                      return (
-                        <ShuffleSlot key={i} slotIndex={i} shuffleNonce={sn}>
-                          {cardView}
-                        </ShuffleSlot>
-                      );
-                    }
-                    return <div key={i}>{cardView}</div>;
+                    const inner = locked ? (
+                      cardView
+                    ) : (
+                      <ShuffleSlot slotIndex={i} shuffleNonce={sn}>
+                        {cardView}
+                      </ShuffleSlot>
+                    );
+                    return (
+                      <div key={i} ref={setSlotRef(op.id, i)} className={hidden ? "slot-hidden" : undefined}>
+                        {inner}
+                      </div>
+                    );
                   })}
                 </Hand>
               </div>
@@ -323,42 +370,32 @@ export function TurnView({ engine, playerId, dispatch, cue, onTurnEnd, onExit }:
             const marker = myMarkers.get(i);
             const locked = !!marker;
             const tilt = tiltForSlot(playerId, i);
-            const extra = slotCueClass(playerId, i);
             const sn = locked ? undefined : shuffleNonceFor(playerId);
-            const setSlotRef = (el: HTMLElement | null) => {
-              handSlotRefs.current[i] = el;
-            };
-            const cardView = (
-              <CardView
-                hidden
-                lockMarker={marker}
-                label={`#${i + 1}`}
-                size="lg"
-                tilt={tilt}
-                motionProps={extra ? { className: `card-slot ${extra}` } : undefined}
-              />
+            const hidden = hiddenSlots.has(`${playerId}-${i}`);
+            const cardView = <CardView hidden lockMarker={marker} label={`#${i + 1}`} size="lg" tilt={tilt} />;
+            const inner = locked ? (
+              cardView
+            ) : (
+              <ShuffleSlot slotIndex={i} shuffleNonce={sn}>
+                {cardView}
+              </ShuffleSlot>
             );
             if (inDecision && !locked) {
               return (
-                <button key={i} ref={setSlotRef} type="button" className="slot-btn" onClick={() => replaceSlot(i)}>
-                  <ShuffleSlot slotIndex={i} shuffleNonce={sn}>
-                    {cardView}
-                  </ShuffleSlot>
+                <button
+                  key={i}
+                  ref={setSlotRef(playerId, i)}
+                  type="button"
+                  className={hidden ? "slot-btn slot-hidden" : "slot-btn"}
+                  onClick={() => replaceSlot(i)}
+                >
+                  {inner}
                 </button>
               );
             }
-            if (!locked) {
-              return (
-                <div key={i} ref={setSlotRef}>
-                  <ShuffleSlot slotIndex={i} shuffleNonce={sn}>
-                    {cardView}
-                  </ShuffleSlot>
-                </div>
-              );
-            }
             return (
-              <div key={i} ref={setSlotRef}>
-                {cardView}
+              <div key={i} ref={setSlotRef(playerId, i)} className={hidden ? "slot-hidden" : undefined}>
+                {inner}
               </div>
             );
           })}
