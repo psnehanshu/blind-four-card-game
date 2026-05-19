@@ -1,6 +1,8 @@
+import { useEffect } from "react";
 import type { GameEngine } from "../../../engine/game-engine.js";
 import { CardView } from "./CardView.js";
 import { tiltForSlot } from "../util/rand.js";
+import { playWin } from "../audio/sound.js";
 
 interface Props {
   engine: GameEngine;
@@ -8,6 +10,9 @@ interface Props {
 }
 
 export function FinalReveal({ engine, onExit }: Props) {
+  useEffect(() => {
+    playWin();
+  }, []);
   // Game is finished — all hands are public per spec, so we read the live state.
   const game = engine.getState();
   const winners = new Set(engine.winners.map((w) => w.id));

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { CardView } from "./CardView.js";
 import { DeckStack } from "./Pile.js";
 import { FlightLayer, type Flight } from "./FlightLayer.js";
+import { playDeal, playShuffle } from "../audio/sound.js";
 
 interface Props {
   players: { id: string; name: string }[];
@@ -35,6 +36,7 @@ export function Dealing({ players, handSize, onComplete }: Props) {
   // Shuffle → deal handoff.
   useEffect(() => {
     if (phase !== "shuffle") return;
+    playShuffle();
     const t = setTimeout(() => setPhase("deal"), SHUFFLE_MS);
     return () => clearTimeout(t);
   }, [phase]);
@@ -64,6 +66,7 @@ export function Dealing({ players, handSize, onComplete }: Props) {
           onComplete: () => {
             setFlights((prev) => prev.filter((f) => f.id !== id));
             setSettled((s) => s + 1);
+            playDeal();
           },
         };
         setFlights((prev) => [...prev, flight]);

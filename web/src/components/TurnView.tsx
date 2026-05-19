@@ -13,6 +13,7 @@ import { FlightLayer, type Flight } from "./FlightLayer.js";
 import { Hand } from "./Hand.js";
 import { ShuffleSlot } from "./ShuffleSlot.js";
 import { tiltForSlot } from "../util/rand.js";
+import { playPeek, playShowdown } from "../audio/sound.js";
 
 interface PeekDisplay {
   playerName: string;
@@ -224,7 +225,15 @@ export function TurnView({ engine, playerId, dispatch, cue, onTurnEnd, onExit }:
   }, [cue]);
 
   function callShowdown() {
-    if (tryDispatch("CALL_SHOWDOWN", undefined)) onTurnEnd();
+    if (tryDispatch("CALL_SHOWDOWN", undefined)) {
+      playShowdown();
+      onTurnEnd();
+    }
+  }
+
+  function showPeek(result: PeekDisplay | null) {
+    if (result) playPeek();
+    setPeekDisplay(result);
   }
 
   // Lock markers for this player so we can render the K/Joker face-up on top of locked slots.
@@ -407,7 +416,7 @@ export function TurnView({ engine, playerId, dispatch, cue, onTurnEnd, onExit }:
           which would otherwise cover a flying card mid-arc. */}
       <Dialog open={inPower && !peekDisplay && flights.length === 0}>
         {inPower && !peekDisplay && (
-          <PowerView engine={engine} playerId={playerId} dispatch={dispatch} onResolved={setPeekDisplay} />
+          <PowerView engine={engine} playerId={playerId} dispatch={dispatch} onResolved={showPeek} />
         )}
       </Dialog>
 

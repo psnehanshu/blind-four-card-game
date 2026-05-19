@@ -12,7 +12,8 @@
   "dependencies": {
     "motion": "^12.39.0",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "tone": "^15.1.22"
   },
   "devDependencies": {
     "@types/react": "^19.0.0",

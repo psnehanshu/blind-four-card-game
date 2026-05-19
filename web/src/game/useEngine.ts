@@ -2,6 +2,7 @@ import { useEffect, useReducer, useRef, useState } from "react";
 import type { GameEngine } from "../../../engine/game-engine.js";
 import type { EngineResult, EventPayloadMap, ProposedEventType } from "../../../engine/types.js";
 import { deriveCue, type AnimationCue } from "./cue.js";
+import { playForCue } from "../audio/sound.js";
 
 export type Dispatch = <T extends ProposedEventType>(
   playerId: string,
@@ -35,7 +36,10 @@ export function useEngine(engine: GameEngine): UseEngine {
     if (!result.error) {
       nonceRef.current += 1;
       const next = deriveCue(type, payload, nonceRef.current);
-      if (next) setCue(next);
+      if (next) {
+        setCue(next);
+        playForCue(next);
+      }
     }
     return result;
   };

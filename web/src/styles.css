@@ -637,6 +637,25 @@ button.slot-btn:hover:not(:disabled) {
   visibility: hidden;
 }
 
+/* ───────── splash ───────── */
+
+.screen.splash {
+  justify-content: center;
+  text-align: center;
+  gap: 24px;
+}
+
+.screen.splash h1 {
+  font-size: 56px;
+  letter-spacing: -1px;
+}
+
+.small-note {
+  font-size: 12px;
+  max-width: 320px;
+  line-height: 1.4;
+}
+
 /* ───────── dealing intro ───────── */
 
 .screen.dealing {
@@ -690,6 +709,14 @@ button.slot-btn:hover:not(:disabled) {
   display: flex;
   align-items: center;
   justify-content: center;
+  border: 1px dashed var(--ghost-border);
+  border-radius: 10px;
+}
+
+/* Once a card lands in a slot, the CardView fully covers the dashed outline,
+   but suppress the border to avoid a 1-px halo if rendering doesn't quite cover. */
+.dealing-slot:has(.card) {
+  border-color: transparent;
 }
 
 .peek-flip {
