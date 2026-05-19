@@ -1,4 +1,4 @@
-import type { EventPayloadMap, PowerAction, ProposedEventType } from "../../../engine/types.js";
+import type { EventPayloadMap, ProposedEventType } from "../../../engine/types.js";
 
 /**
  * A short-lived hint, set on every successful dispatch, that drives transient
@@ -9,53 +9,70 @@ import type { EventPayloadMap, PowerAction, ProposedEventType } from "../../../e
  */
 export type AnimationCue =
   | { kind: "shuffle"; nonce: number; targetPlayerId: string }
-  | { kind: "swap"; nonce: number; a: { playerId: string; cardIndex: number }; b: { playerId: string; cardIndex: number } }
+  | {
+      kind: "swap";
+      nonce: number;
+      a: { playerId: string; cardIndex: number };
+      b: { playerId: string; cardIndex: number };
+    }
   | { kind: "lock"; nonce: number; targetPlayerId: string; cardIndex: number }
   | { kind: "draw"; nonce: number; source: "deck" | "discard" }
   | { kind: "discard"; nonce: number }
   | { kind: "replace"; nonce: number; handIndex: number }
   | null;
 
-function isDrawPayload<T extends ProposedEventType>(
-  type: T,
-  _payload: EventPayloadMap[T],
-): _payload is EventPayloadMap["DRAW_CARD"] {
-  return type === "DRAW_CARD";
-}
-
-function isReplacePayload<T extends ProposedEventType>(
-  type: T,
-  _payload: EventPayloadMap[T],
-): _payload is EventPayloadMap["REPLACE_CARD"] {
-  return type === "REPLACE_CARD";
-}
-
-function isPowerPayload<T extends ProposedEventType>(type: T, _payload: EventPayloadMap[T]): _payload is PowerAction {
-  return type === "USE_POWER";
+function isObj(p: unknown): p is Record<string, unknown> {
+  return !!p && typeof p === "object";
 }
 
 /**
  * Inspects an event and returns the matching animation cue, or null. Pure —
  * does not access the engine.
+ *
+ * Payloads are narrowed structurally rather than via type predicates because
+ * TS won't co-narrow `payload: EventPayloadMap[T]` when `type` is matched
+ * against a literal. The engine guarantees type/payload match at runtime;
+ * these structural checks are defensive.
  */
 export function deriveCue<T extends ProposedEventType>(type: T, payload: EventPayloadMap[T], nonce: number): AnimationCue {
-  if (isDrawPayload(type, payload)) return { kind: "draw", nonce, source: payload.source };
-  if (isReplacePayload(type, payload)) return { kind: "replace", nonce, handIndex: payload.handIndex };
+  const raw: unknown = payload;
+  if (type === "DRAW_CARD" && isObj(raw)) {
+    const src = raw.source;
+    if (src === "deck" || src === "discard") return { kind: "draw", nonce, source: src };
+    return null;
+  }
+  if (type === "REPLACE_CARD" && isObj(raw)) {
+    const idx = raw.handIndex;
+    if (typeof idx === "number") return { kind: "replace", nonce, handIndex: idx };
+    return null;
+  }
   if (type === "DISCARD_DRAWN") return { kind: "discard", nonce };
-  if (isPowerPayload(type, payload)) {
-    const effective = payload.power === "joker" ? payload.action : payload;
-    if (effective.power === "shuffle") return { kind: "shuffle", nonce, targetPlayerId: effective.targetPlayerId };
-    if (effective.power === "swap") {
-      return {
-        kind: "swap",
-        nonce,
-        a: { playerId: effective.sourcePlayerId, cardIndex: effective.sourceCardIndex },
-        b: { playerId: effective.targetPlayerId, cardIndex: effective.targetCardIndex },
-      };
-    }
-    if (effective.power === "lock") {
-      return { kind: "lock", nonce, targetPlayerId: effective.targetPlayerId, cardIndex: effective.cardIndex };
-    }
+  if (type === "USE_POWER" && isObj(raw)) return derivePowerCue(raw, nonce);
+  return null;
+}
+
+function derivePowerCue(p: Record<string, unknown>, nonce: number): AnimationCue {
+  // Joker mimics another rank — treat joker-as-shuffle identically to a direct shuffle.
+  const core: Record<string, unknown> = p.power === "joker" && isObj(p.action) ? p.action : p;
+  if (core.power === "shuffle" && typeof core.targetPlayerId === "string") {
+    return { kind: "shuffle", nonce, targetPlayerId: core.targetPlayerId };
+  }
+  if (
+    core.power === "swap" &&
+    typeof core.sourcePlayerId === "string" &&
+    typeof core.sourceCardIndex === "number" &&
+    typeof core.targetPlayerId === "string" &&
+    typeof core.targetCardIndex === "number"
+  ) {
+    return {
+      kind: "swap",
+      nonce,
+      a: { playerId: core.sourcePlayerId, cardIndex: core.sourceCardIndex },
+      b: { playerId: core.targetPlayerId, cardIndex: core.targetCardIndex },
+    };
+  }
+  if (core.power === "lock" && typeof core.targetPlayerId === "string" && typeof core.cardIndex === "number") {
+    return { kind: "lock", nonce, targetPlayerId: core.targetPlayerId, cardIndex: core.cardIndex };
   }
   return null;
 }

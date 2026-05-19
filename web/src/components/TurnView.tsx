@@ -11,6 +11,7 @@ import { DeckStack, DiscardStack } from "./Pile.js";
 import { PeekCardFlip } from "./PeekCardFlip.js";
 import { FlightLayer, type Flight } from "./FlightLayer.js";
 import { Hand } from "./Hand.js";
+import { ShuffleSlot } from "./ShuffleSlot.js";
 import { tiltForSlot } from "../util/rand.js";
 
 interface PeekDisplay {
@@ -188,7 +189,7 @@ export function TurnView({ engine, playerId, dispatch, cue, onTurnEnd, onExit }:
     return "";
   }
 
-  function shakeNonceFor(handPlayerId: string): number | undefined {
+  function shuffleNonceFor(handPlayerId: string): number | undefined {
     if (cue?.kind === "shuffle" && cue.targetPlayerId === handPlayerId) return cue.nonce;
     return undefined;
   }
@@ -232,20 +233,30 @@ export function TurnView({ engine, playerId, dispatch, cue, onTurnEnd, onExit }:
             return (
               <div key={op.id} className="opponent">
                 <span className="opponent-name">{op.name}</span>
-                <Hand className="hand small" shakeNonce={shakeNonceFor(op.id)}>
+                <Hand className="hand small" shakeNonce={shuffleNonceFor(op.id)}>
                   {Array.from({ length: op.handSize }).map((_, i) => {
+                    const marker = markers.get(i);
+                    const locked = !!marker;
                     const extra = slotCueClass(op.id, i);
-                    return (
+                    const sn = locked ? undefined : shuffleNonceFor(op.id);
+                    const cardView = (
                       <CardView
-                        key={i}
                         hidden
-                        lockMarker={markers.get(i)}
+                        lockMarker={marker}
                         label={`#${i + 1}`}
                         size="sm"
                         tilt={tiltForSlot(op.id, i)}
                         motionProps={extra ? { className: `card-slot ${extra}` } : undefined}
                       />
                     );
+                    if (!locked) {
+                      return (
+                        <ShuffleSlot key={i} slotIndex={i} shuffleNonce={sn}>
+                          {cardView}
+                        </ShuffleSlot>
+                      );
+                    }
+                    return <div key={i}>{cardView}</div>;
                   })}
                 </Hand>
               </div>
@@ -307,39 +318,47 @@ export function TurnView({ engine, playerId, dispatch, cue, onTurnEnd, onExit }:
 
       <section className="my-hand">
         <h3>Your hand {inDecision && <span className="muted">— tap a slot to replace</span>}</h3>
-        <Hand className="hand" shakeNonce={shakeNonceFor(playerId)}>
+        <Hand className="hand" shakeNonce={shuffleNonceFor(playerId)}>
           {Array.from({ length: handSize }).map((_, i) => {
             const marker = myMarkers.get(i);
             const locked = !!marker;
             const tilt = tiltForSlot(playerId, i);
             const extra = slotCueClass(playerId, i);
+            const sn = locked ? undefined : shuffleNonceFor(playerId);
             const setSlotRef = (el: HTMLElement | null) => {
               handSlotRefs.current[i] = el;
             };
+            const cardView = (
+              <CardView
+                hidden
+                lockMarker={marker}
+                label={`#${i + 1}`}
+                size="lg"
+                tilt={tilt}
+                motionProps={extra ? { className: `card-slot ${extra}` } : undefined}
+              />
+            );
             if (inDecision && !locked) {
               return (
                 <button key={i} ref={setSlotRef} type="button" className="slot-btn" onClick={() => replaceSlot(i)}>
-                  <CardView
-                    hidden
-                    lockMarker={marker}
-                    label={`#${i + 1}`}
-                    size="lg"
-                    tilt={tilt}
-                    motionProps={extra ? { className: `card-slot ${extra}` } : undefined}
-                  />
+                  <ShuffleSlot slotIndex={i} shuffleNonce={sn}>
+                    {cardView}
+                  </ShuffleSlot>
                 </button>
+              );
+            }
+            if (!locked) {
+              return (
+                <div key={i} ref={setSlotRef}>
+                  <ShuffleSlot slotIndex={i} shuffleNonce={sn}>
+                    {cardView}
+                  </ShuffleSlot>
+                </div>
               );
             }
             return (
               <div key={i} ref={setSlotRef}>
-                <CardView
-                  hidden
-                  lockMarker={marker}
-                  label={`#${i + 1}`}
-                  size="lg"
-                  tilt={tilt}
-                  motionProps={extra ? { className: `card-slot ${extra}` } : undefined}
-                />
+                {cardView}
               </div>
             );
           })}

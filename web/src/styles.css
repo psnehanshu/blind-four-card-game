@@ -642,6 +642,13 @@ button.slot-btn:hover:not(:disabled) {
   animation: swap-pulse-flash 0.6s ease-out;
 }
 
+/* Per-slot wrapper for the J/shuffle dance — kept relative so the card lift
+   draws above its non-shuffling siblings (labels, locked cards). */
+.shuffle-slot {
+  position: relative;
+  z-index: 1;
+}
+
 .peek-flip {
   width: 90px;
   height: 128px;
