@@ -649,6 +649,61 @@ button.slot-btn:hover:not(:disabled) {
   z-index: 1;
 }
 
+/* ───────── dealing intro ───────── */
+
+.screen.dealing {
+  gap: 32px;
+  justify-content: flex-start;
+}
+
+.dealing-deck {
+  margin-top: 8px;
+  transform-origin: 50% 50%;
+}
+
+.dealing-deck.shuffling {
+  animation: deck-shuffle 0.32s ease-in-out infinite;
+}
+
+@keyframes deck-shuffle {
+  0%,
+  100% {
+    transform: translate(0, 0) rotate(0);
+  }
+  25% {
+    transform: translate(-6px, -2px) rotate(-4deg);
+  }
+  50% {
+    transform: translate(4px, 1px) rotate(3deg);
+  }
+  75% {
+    transform: translate(-3px, 2px) rotate(-2deg);
+  }
+}
+
+.dealing-players {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 28px 36px;
+  justify-content: center;
+  width: 100%;
+}
+
+.dealing-player {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.dealing-slot {
+  width: 70px;
+  height: 100px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .peek-flip {
   width: 90px;
   height: 128px;

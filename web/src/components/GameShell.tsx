@@ -6,6 +6,7 @@ import { PassDeviceGate } from "./PassDeviceGate.js";
 import { InitialReveal } from "./InitialReveal.js";
 import { TurnView } from "./TurnView.js";
 import { FinalReveal } from "./FinalReveal.js";
+import { Dealing } from "./Dealing.js";
 
 interface Props {
   engine: GameEngine;
@@ -16,6 +17,8 @@ export function GameShell({ engine, onExit }: Props) {
   const { dispatch, version: _version, cue } = useEngine(engine);
   // Always gated at start of a turn / reveal; cleared once the active player taps through.
   const [gateClosed, setGateClosed] = useState(true);
+  // Plays once per game instance — the shuffle/deal intro animation.
+  const [dealingDone, setDealingDone] = useState(false);
 
   const state = engine.getState();
   const activeId = nextActivePlayerId(engine);
@@ -23,6 +26,17 @@ export function GameShell({ engine, onExit }: Props) {
 
   if (state.state === "finished") {
     return <FinalReveal engine={engine} onExit={onExit} />;
+  }
+
+  if (state.state === "initial_reveal" && !dealingDone) {
+    const handSize = state.players[0]?.hand.length ?? 4;
+    return (
+      <Dealing
+        players={state.players.map((p) => ({ id: p.id, name: p.name }))}
+        handSize={handSize}
+        onComplete={() => setDealingDone(true)}
+      />
+    );
   }
 
   if (activeId === null) {
