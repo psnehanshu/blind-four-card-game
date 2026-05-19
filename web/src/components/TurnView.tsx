@@ -243,7 +243,11 @@ export function TurnView({ engine, playerId, dispatch, cue, onTurnEnd, onExit }:
   const handSize = me?.handSize ?? 4;
 
   const canDraw = valid.includes("DRAW_CARD");
-  const inDecision = valid.includes("REPLACE_CARD") && valid.includes("DISCARD_DRAWN");
+  // REPLACE_CARD is offered any time there's a drawn card; DISCARD_DRAWN is
+  // only available for deck-drawn cards (discard-drawn cards must be played
+  // into the hand). The two are intentionally separate signals.
+  const canReplace = valid.includes("REPLACE_CARD");
+  const canDiscardDrawn = valid.includes("DISCARD_DRAWN");
   const inPower = valid.includes("USE_POWER");
   const canEnd = valid.includes("END_TURN");
   const canShowdown = valid.includes("CALL_SHOWDOWN");
@@ -361,10 +365,13 @@ export function TurnView({ engine, playerId, dispatch, cue, onTurnEnd, onExit }:
             <div ref={drawnRef}>
               <CardView card={drawn} size="md" />
             </div>
-            {inDecision && (
+            {canDiscardDrawn && (
               <button type="button" className="primary" onClick={discardDrawn}>
                 Discard this card
               </button>
+            )}
+            {canReplace && !canDiscardDrawn && (
+              <p className="muted small-note">Drawn from discard — must be placed into your hand.</p>
             )}
           </div>
         )}
@@ -373,7 +380,7 @@ export function TurnView({ engine, playerId, dispatch, cue, onTurnEnd, onExit }:
       </section>
 
       <section className="my-hand">
-        <h3>Your hand {inDecision && <span className="muted">— tap a slot to replace</span>}</h3>
+        <h3>Your hand {canReplace && <span className="muted">— tap a slot to replace</span>}</h3>
         <Hand className="hand" shakeNonce={shuffleNonceFor(playerId)}>
           {Array.from({ length: handSize }).map((_, i) => {
             const marker = myMarkers.get(i);
@@ -389,7 +396,7 @@ export function TurnView({ engine, playerId, dispatch, cue, onTurnEnd, onExit }:
                 {cardView}
               </ShuffleSlot>
             );
-            if (inDecision && !locked) {
+            if (canReplace && !locked) {
               return (
                 <button
                   key={i}

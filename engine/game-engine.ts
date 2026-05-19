@@ -40,6 +40,13 @@ export class GameEngine {
   // Internal turn-phase tracking
   private phase: TurnPhase = "draw";
   private drawnCard: Card | null = null;
+  /**
+   * True when the current `drawnCard` was taken from the discard pile rather
+   * than the deck. A power card drawn from discard, then immediately
+   * DISCARD_DRAWN back onto the pile, must NOT re-trigger its power — the
+   * card has already had its discard moment. Cleared whenever drawnCard is.
+   */
+  private drawnFromDiscard = false;
   private totalTurnsTaken = 0;
   private playerTurnCount = new Map<string, number>();
   private pendingPowerRank: Rank | null = null;
@@ -134,7 +141,10 @@ export class GameEngine {
         valid.push("DRAW_CARD");
         break;
       case "decision":
-        valid.push("REPLACE_CARD", "DISCARD_DRAWN");
+        valid.push("REPLACE_CARD");
+        // A card drawn from the discard pile must be placed into the hand —
+        // it cannot be discarded back. Only deck draws are discardable.
+        if (!this.drawnFromDiscard) valid.push("DISCARD_DRAWN");
         break;
       case "power":
         valid.push("USE_POWER");
@@ -314,6 +324,9 @@ export class GameEngine {
     } else if (eventType === "REPLACE_CARD" || eventType === "DISCARD_DRAWN") {
       if (this.phase !== "decision") return "Must replace or discard drawn card";
       if (!this.drawnCard) return "No card drawn yet";
+      if (eventType === "DISCARD_DRAWN" && this.drawnFromDiscard) {
+        return "A card drawn from the discard pile must be replaced into the hand";
+      }
       if (this.isReplacePayload(eventType, payload)) {
         const replaceError = this.validateReplaceTarget(payload.handIndex);
         if (replaceError) return replaceError;
@@ -477,6 +490,7 @@ export class GameEngine {
     }
 
     this.drawnCard = drawn;
+    this.drawnFromDiscard = source === "discard";
     this.phase = "decision";
   }
 
@@ -499,17 +513,19 @@ export class GameEngine {
 
     player.hand[handIndex] = { card: drawnCard, locked: false };
     this.drawnCard = null;
+    this.drawnFromDiscard = false;
 
     // Discard the replaced card and check for power
     this.discardAndCheckPower(target.card);
   }
 
-  /** Discards the drawn card and triggers any power check. */
+  /** Discards the drawn card (only reachable when drawn from the deck). */
   private applyDiscardDrawn(_event: CommittedEvent<"DISCARD_DRAWN">): void {
     const { drawnCard } = this;
     if (!drawnCard) throw new Error("No card drawn yet");
 
     this.drawnCard = null;
+    this.drawnFromDiscard = false;
     this.discardAndCheckPower(drawnCard);
   }
 
@@ -690,6 +706,7 @@ export class GameEngine {
   private advanceTurn(): void {
     this.phase = "draw";
     this.drawnCard = null;
+    this.drawnFromDiscard = false;
     this.pendingPowerRank = null;
     this.totalTurnsTaken++;
 

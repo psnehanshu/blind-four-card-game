@@ -102,10 +102,14 @@ Rules:
 
 ## Decision
 
-Choose one:
+If the card was drawn from the **deck**, choose one:
 
 - replace non-locked hand card
 - discard drawn card
+
+If the card was drawn from the **discard pile**, the only legal action is:
+
+- replace non-locked hand card (the drawn card cannot be discarded back)
 
 ## Power Resolution
 
@@ -113,7 +117,7 @@ Choose one:
 - discarded card may originate from draw or replaced hand card
 - powers resolve immediately after discard
 - discarded power cards stay visible in discard pile
-- discard-drawn power cards activate only on future discard
+- a card drawn from the discard pile is never re-discarded directly; its power can only fire again if the card later leaves a player's hand into discard (via REPLACE_CARD on a future turn)
 - King/Joker lock markers never re-enter discard until round end
 
 ## End Turn

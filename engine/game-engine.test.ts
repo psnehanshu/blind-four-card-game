@@ -437,12 +437,13 @@ describe("GameEngine — turn flow", () => {
     const drawR = e.processEvent("bob", "DRAW_CARD", { source: "discard" });
     assert.equal(drawR.error, undefined);
     assert.ok(!drawR.validEvents.includes("USE_POWER"), "drawing a power card from discard must not trigger USE_POWER");
-    assert.deepEqual(drawR.validEvents.sort(), ["DISCARD_DRAWN", "REPLACE_CARD"].sort());
+    // Only REPLACE_CARD is offered: discard draws must be placed into the hand.
+    assert.deepEqual(drawR.validEvents, ["REPLACE_CARD"]);
   });
 
-  it("DISCARD_DRAWN of a discard-drawn power card activates the power", () => {
-    // Same setup as the prior test, but bob discards the drawn Q — that
-    // future discard should activate the swap power.
+  it("DISCARD_DRAWN of a card drawn from the discard pile is rejected — must be replaced", () => {
+    // Setup: alice replaces in a Q so the discard top is Q, then bob draws it.
+    // bob must NOT be allowed to discard it back; only REPLACE_CARD is valid.
     const e = startGame({ playerIds: ["alice", "bob"], seed: 0 });
     e.processEvent("alice", "DRAW_CARD", { source: "deck" });
     e.processEvent("alice", "REPLACE_CARD", { handIndex: 2 });
@@ -455,19 +456,17 @@ describe("GameEngine — turn flow", () => {
     });
     e.processEvent("alice", "END_TURN", undefined);
 
-    e.processEvent("bob", "DRAW_CARD", { source: "discard" });
-    const discR = e.processEvent("bob", "DISCARD_DRAWN", undefined);
-    assert.equal(discR.error, undefined);
-    assert.ok(discR.validEvents.includes("USE_POWER"), "DISCARD_DRAWN of the Q must trigger USE_POWER");
+    const drawR = e.processEvent("bob", "DRAW_CARD", { source: "discard" });
+    assert.equal(drawR.error, undefined);
+    assert.ok(drawR.validEvents.includes("REPLACE_CARD"), "REPLACE_CARD must remain valid");
+    assert.ok(!drawR.validEvents.includes("DISCARD_DRAWN"), "DISCARD_DRAWN must NOT be valid after a discard draw");
 
-    const swapR = e.processEvent("bob", "USE_POWER", {
-      power: "swap",
-      sourcePlayerId: "bob",
-      sourceCardIndex: 1,
-      targetPlayerId: "alice",
-      targetCardIndex: 1,
-    });
-    assert.equal(swapR.error, undefined);
+    const discR = e.processEvent("bob", "DISCARD_DRAWN", undefined);
+    assert.match(discR.error ?? "", /must be replaced into the hand/);
+
+    // The drawn card is still in hand for replace; following through must succeed.
+    const repR = e.processEvent("bob", "REPLACE_CARD", { handIndex: 1 });
+    assert.equal(repR.error, undefined);
   });
 
   it("REPLACE_CARD activates the discarded hand card's power", () => {
