@@ -1,13 +1,16 @@
 import { io, type Socket } from "socket.io-client";
 import { MSG_CHANNEL, type ClientMsg, type ServerMsg } from "../../../server/wire.js";
 
-const URL = import.meta.env.VITE_SERVER_URL ?? "http://localhost:3001";
+const URL = import.meta.env.VITE_SERVER_URL ?? "";
+const SOCKET_PATH = import.meta.env.VITE_SOCKET_PATH ?? "/api/socket.io/";
 
 let socket: Socket | null = null;
 
 function getSocket(): Socket {
   if (!socket) {
-    socket = io(URL, { transports: ["websocket"] });
+    socket = URL
+      ? io(URL, { transports: ["websocket"] })
+      : io({ path: SOCKET_PATH, transports: ["websocket"] });
   }
   return socket;
 }
