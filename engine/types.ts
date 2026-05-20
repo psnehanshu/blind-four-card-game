@@ -190,6 +190,10 @@ export interface VisibleGameState {
   callerId?: string;
   /** Own hand cards — only populated during initial_reveal and finished states. */
   myHand?: { index: number; card: PlayerCard }[];
+  /** Every player's hand. Only populated when state === "finished" — at that
+   *  point all hands are public per spec. Remote clients need this for
+   *  FinalReveal, which has no access to the engine's full Game state. */
+  allHands?: { playerId: string; hand: PlayerCard[] }[];
   /** All active lock markers, visible to every player. */
   lockMarkers: LockMarker[];
 }

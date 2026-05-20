@@ -1,42 +1,42 @@
 import { useEffect } from "react";
-import type { GameEngine } from "../../../engine/game-engine.js";
+import type { RemoteEngine } from "../net/useRemoteEngine.js";
 import { CardView } from "./CardView.js";
 import { tiltForSlot } from "../util/rand.js";
 import { playWin } from "../audio/sound.js";
 
 interface Props {
-  engine: GameEngine;
-  onExit: () => void;
+  remote: RemoteEngine;
 }
 
-export function FinalReveal({ engine, onExit }: Props) {
+export function FinalReveal({ remote }: Props) {
   useEffect(() => {
     playWin();
   }, []);
-  // Game is finished — all hands are public per spec, so we read the live state.
-  const game = engine.getState();
-  const winners = new Set(engine.winners.map((w) => w.id));
-  const callerName = game.players.find((p) => p.id === game.callerId)?.name;
+  const { visibleState, displayNames, winnerIds } = remote;
+  if (!visibleState) return null;
+  const winners = new Set(winnerIds);
+  const callerId = visibleState.callerId;
+  const callerName = callerId
+    ? (displayNames[callerId] ?? visibleState.players.find((p) => p.id === callerId)?.name)
+    : undefined;
+
   const markersByPlayer = new Map<string, Map<number, import("../../../engine/types.js").Card>>();
-  // The live Game type doesn't expose lockMarkers; pull them via any player's visible state
-  // (lockMarkers are public, so any playerId works).
-  const anyPlayerId = game.players[0]?.id;
-  if (anyPlayerId) {
-    const vs = engine.getVisibleState(anyPlayerId);
-    for (const lm of vs.lockMarkers) {
-      const map = markersByPlayer.get(lm.playerId) ?? new Map();
-      map.set(lm.cardIndex, lm.markerCard);
-      markersByPlayer.set(lm.playerId, map);
-    }
+  for (const lm of visibleState.lockMarkers) {
+    const map = markersByPlayer.get(lm.playerId) ?? new Map();
+    map.set(lm.cardIndex, lm.markerCard);
+    markersByPlayer.set(lm.playerId, map);
   }
 
-  const rows = game.players.map((player) => {
-    const score = player.hand.reduce((sum, pc) => sum + pc.card.value, 0);
-    const markers = markersByPlayer.get(player.id) ?? new Map();
-    return { player, score, markers };
+  const allHands = visibleState.allHands ?? [];
+  const rows = allHands.map((entry) => {
+    const player = visibleState.players.find((p) => p.id === entry.playerId);
+    const name = displayNames[entry.playerId] ?? player?.name ?? entry.playerId;
+    const score = entry.hand.reduce((sum, pc) => sum + pc.card.value, 0);
+    const markers = markersByPlayer.get(entry.playerId) ?? new Map();
+    return { playerId: entry.playerId, name, hand: entry.hand, score, markers };
   });
 
-  const lowestScore = Math.min(...rows.map((r) => r.score));
+  const lowestScore = rows.length > 0 ? Math.min(...rows.map((r) => r.score)) : 0;
 
   return (
     <div className="screen final">
@@ -44,21 +44,21 @@ export function FinalReveal({ engine, onExit }: Props) {
       {callerName && <p className="muted">{callerName} called showdown.</p>}
 
       <section className="final-results">
-        {rows.map(({ player, score, markers }) => {
-          const isWinner = winners.has(player.id);
-          const isCaller = player.id === game.callerId;
+        {rows.map(({ playerId, name, hand, score, markers }) => {
+          const isWinner = winners.has(playerId);
+          const isCaller = playerId === callerId;
           return (
-            <div key={player.id} className={isWinner ? "final-row winner" : "final-row"}>
+            <div key={playerId} className={isWinner ? "final-row winner" : "final-row"}>
               <div className="final-row-header">
                 <span className="final-name">
-                  {player.name}
+                  {name}
                   {isCaller && <span className="badge caller">CALLER</span>}
                   {isWinner && <span className="badge winner-badge">WINNER</span>}
                 </span>
                 <span className={score === lowestScore ? "final-score low" : "final-score"}>{score}</span>
               </div>
               <div className="hand">
-                {player.hand.map((pc, i) => (
+                {hand.map((pc, i) => (
                   <CardView
                     key={i}
                     card={pc.card}
@@ -66,7 +66,7 @@ export function FinalReveal({ engine, onExit }: Props) {
                     size="md"
                     lockMarker={markers.get(i)}
                     markerStyle="label"
-                    tilt={tiltForSlot(player.id, i)}
+                    tilt={tiltForSlot(playerId, i)}
                   />
                 ))}
               </div>
@@ -74,10 +74,6 @@ export function FinalReveal({ engine, onExit }: Props) {
           );
         })}
       </section>
-
-      <button type="button" className="primary big" onClick={onExit}>
-        Back to lobby
-      </button>
     </div>
   );
 }

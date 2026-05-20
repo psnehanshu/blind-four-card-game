@@ -1693,6 +1693,30 @@ describe("GameEngine — visibility", () => {
         assert.equal(vs.myHand[i]?.card.card.id, actual.hand[i]?.card.id);
       }
     }
+
+    // allHands should mirror every player's hand at finished — needed by remote
+    // clients that can't read engine.getState() directly.
+    for (const pid of ["alice", "bob"]) {
+      const vs = e.getVisibleState(pid);
+      assert.ok(vs.allHands, `${pid}'s allHands should be populated at finished`);
+      assert.equal(vs.allHands.length, 2);
+      for (const entry of vs.allHands) {
+        const actual = e.getState().players.find((p) => p.id === entry.playerId);
+        assert.ok(actual);
+        assert.equal(entry.hand.length, HAND_SIZE);
+        for (let i = 0; i < HAND_SIZE; i++) {
+          assert.equal(entry.hand[i]?.card.id, actual.hand[i]?.card.id);
+          assert.equal(entry.hand[i]?.locked, actual.hand[i]?.locked);
+        }
+      }
+    }
+  });
+
+  it("allHands is absent during in_progress and showdown", () => {
+    const e = startGame({ playerIds: ["alice", "bob"], seed: 42 });
+    for (const pid of ["alice", "bob"]) {
+      assert.equal(e.getVisibleState(pid).allHands, undefined, `${pid}'s allHands must be absent in_progress`);
+    }
   });
 });
 

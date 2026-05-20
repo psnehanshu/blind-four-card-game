@@ -10,5 +10,5 @@
     "noEmit": true,
     "noUncheckedIndexedAccess": true
   },
-  "include": ["engine/**/*.ts"]
+  "include": ["engine/**/*.ts", "server/**/*.ts"]
 }

@@ -1,29 +1,21 @@
 import { motion } from "motion/react";
-import type { GameEngine } from "../../../engine/game-engine.js";
-import type { Dispatch } from "../game/useEngine.js";
+import type { RemoteEngine } from "../net/useRemoteEngine.js";
 import { CardView } from "./CardView.js";
 import { tiltForSlot } from "../util/rand.js";
 
 interface Props {
-  engine: GameEngine;
-  playerId: string;
-  dispatch: Dispatch;
-  onDone: () => void;
+  remote: RemoteEngine;
 }
 
-export function InitialReveal({ engine, playerId, dispatch, onDone }: Props) {
-  const visible = engine.getVisibleState(playerId);
-  const me = visible.players.find((p) => p.id === playerId);
-  const hand = visible.myHand ?? [];
-  const name = me?.name ?? playerId;
+export function InitialReveal({ remote }: Props) {
+  const { identity, visibleState, displayNames, dispatch } = remote;
+  if (!identity || !visibleState) return null;
+
+  const hand = visibleState.myHand ?? [];
+  const name = displayNames[identity.playerId] ?? identity.playerId;
 
   function ack() {
-    const result = dispatch(playerId, "ACKNOWLEDGE_REVEAL", undefined);
-    if (result.error) {
-      alert(`Could not acknowledge: ${result.error}`);
-      return;
-    }
-    onDone();
+    dispatch("ACKNOWLEDGE_REVEAL", undefined);
   }
 
   return (
@@ -43,7 +35,7 @@ export function InitialReveal({ engine, playerId, dispatch, onDone }: Props) {
             card={card.card}
             label={`#${index + 1}`}
             size="lg"
-            tilt={tiltForSlot(playerId, index)}
+            tilt={tiltForSlot(identity.playerId, index)}
             motionProps={{
               variants: {
                 hidden: { y: -40, opacity: 0, rotateX: -60 },
@@ -54,6 +46,8 @@ export function InitialReveal({ engine, playerId, dispatch, onDone }: Props) {
           />
         ))}
       </motion.div>
+
+      {remote.lastError && <div className="error">{remote.lastError}</div>}
 
       <button type="button" className="primary big" onClick={ack}>
         Done — hide my cards

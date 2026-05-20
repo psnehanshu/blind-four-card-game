@@ -1,107 +1,63 @@
-import { useState } from "react";
-import { GameEngine } from "../../../engine/game-engine.js";
-import { MAX_PLAYERS, MIN_PLAYERS } from "../../../engine/types.js";
+import { MIN_PLAYERS } from "../../../engine/types.js";
+import { send } from "../net/socket.js";
+import type { RemoteEngine } from "../net/useRemoteEngine.js";
 
 interface Props {
-  onStart: (engine: GameEngine) => void;
+  remote: RemoteEngine;
 }
 
-export function Lobby({ onStart }: Props) {
-  const [names, setNames] = useState<string[]>(["Alice", "Bob"]);
-  const [seed, setSeed] = useState<string>("");
-  const [error, setError] = useState<string | null>(null);
+export function Lobby({ remote }: Props) {
+  const { identity, lobby } = remote;
+  if (!identity) return null;
 
-  function updateName(i: number, value: string) {
-    setNames((prev) => prev.map((n, idx) => (idx === i ? value : n)));
-  }
-
-  function addPlayer() {
-    setNames((prev) => (prev.length >= MAX_PLAYERS ? prev : [...prev, `Player ${prev.length + 1}`]));
-  }
-
-  function removePlayer(i: number) {
-    setNames((prev) => (prev.length <= MIN_PLAYERS ? prev : prev.filter((_, idx) => idx !== i)));
-  }
+  const isHost = identity.playerId === identity.hostPlayerId;
+  const players = lobby?.players ?? [];
+  const canStart = isHost && players.length >= MIN_PLAYERS;
 
   function start() {
-    setError(null);
-    const trimmed = names.map((n) => n.trim());
-    if (trimmed.some((n) => n.length === 0)) {
-      setError("All player names must be non-empty.");
-      return;
-    }
-    if (new Set(trimmed).size !== trimmed.length) {
-      setError("Player names must be unique.");
-      return;
-    }
-    let seedNum: number | undefined;
-    if (seed.trim().length > 0) {
-      const parsed = Number(seed.trim());
-      if (!Number.isFinite(parsed)) {
-        setError("Seed must be a number.");
-        return;
-      }
-      seedNum = parsed;
-    }
-    try {
-      const engine = new GameEngine({
-        gameId: `game-${Date.now()}`,
-        playerIds: trimmed,
-        ...(seedNum !== undefined ? { seed: seedNum } : {}),
-      });
-      onStart(engine);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      setError(msg);
-    }
+    if (!identity) return;
+    send({ kind: "START_GAME", gameId: identity.gameId });
   }
+
+  const inviteUrl = typeof window === "undefined" ? "" : `${window.location.origin}/#/game/${identity.gameId}`;
 
   return (
     <div className="screen lobby">
       <h1>Blind Four</h1>
-      <p className="muted">Hot-seat mode — pass the device between turns.</p>
+      <p className="muted">Game code: {identity.gameId}</p>
+
+      {isHost && (
+        <section className="form-block">
+          <label htmlFor="invite">Invite link</label>
+          <input id="invite" readOnly value={inviteUrl} onFocus={(e) => e.currentTarget.select()} />
+          <p className="muted small-note">Share this URL — others open it to join.</p>
+        </section>
+      )}
 
       <section className="form-block">
-        <h2>Players ({names.length})</h2>
+        <h2>Players ({players.length})</h2>
         <ul className="player-list">
-          {names.map((name, i) => (
-            <li key={i}>
-              <input value={name} onChange={(e) => updateName(i, e.target.value)} aria-label={`Player ${i + 1} name`} />
-              <button
-                type="button"
-                className="ghost"
-                onClick={() => removePlayer(i)}
-                disabled={names.length <= MIN_PLAYERS}
-                aria-label={`Remove player ${i + 1}`}
-              >
-                Remove
-              </button>
+          {players.map((p) => (
+            <li key={p.playerId}>
+              <span>
+                {p.displayName}
+                {p.playerId === identity.playerId && <span className="muted"> (you)</span>}
+                {p.playerId === identity.hostPlayerId && <span className="badge caller">HOST</span>}
+              </span>
             </li>
           ))}
         </ul>
-        <button type="button" className="ghost" onClick={addPlayer} disabled={names.length >= MAX_PLAYERS}>
-          Add player
+      </section>
+
+      {remote.lastError && <div className="error">{remote.lastError}</div>}
+
+      {isHost ? (
+        <button type="button" className="primary big" disabled={!canStart} onClick={start}>
+          {canStart ? "Start game" : `Waiting for ${MIN_PLAYERS - players.length} more player(s)`}
         </button>
-      </section>
-
-      <section className="form-block">
-        <label htmlFor="seed">
-          Seed <span className="muted">(optional, for deterministic deals)</span>
-        </label>
-        <input
-          id="seed"
-          value={seed}
-          onChange={(e) => setSeed(e.target.value)}
-          placeholder="e.g. 0, 17, 999…"
-          inputMode="numeric"
-        />
-      </section>
-
-      {error && <div className="error">{error}</div>}
-
-      <button type="button" className="primary big" onClick={start}>
-        Start game
-      </button>
+      ) : (
+        <p className="muted">Waiting for the host to start the game…</p>
+      )}
     </div>
   );
 }

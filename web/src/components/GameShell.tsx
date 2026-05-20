@@ -1,74 +1,49 @@
 import { useState } from "react";
-import type { GameEngine } from "../../../engine/game-engine.js";
-import { useEngine } from "../game/useEngine.js";
-import { nextActivePlayerId } from "../game/activePlayer.js";
-import { PassDeviceGate } from "./PassDeviceGate.js";
+import type { RemoteEngine } from "../net/useRemoteEngine.js";
 import { InitialReveal } from "./InitialReveal.js";
 import { TurnView } from "./TurnView.js";
 import { FinalReveal } from "./FinalReveal.js";
 import { Dealing } from "./Dealing.js";
+import { SpectatorView } from "./SpectatorView.js";
 
 interface Props {
-  engine: GameEngine;
-  onExit: () => void;
+  remote: RemoteEngine;
 }
 
-export function GameShell({ engine, onExit }: Props) {
-  const { dispatch, version: _version, cue } = useEngine(engine);
-  // Always gated at start of a turn / reveal; cleared once the active player taps through.
-  const [gateClosed, setGateClosed] = useState(true);
-  // Plays once per game instance — the shuffle/deal intro animation.
+export function GameShell({ remote }: Props) {
+  const { identity, visibleState, validEvents } = remote;
   const [dealingDone, setDealingDone] = useState(false);
 
-  const state = engine.getState();
-  const activeId = nextActivePlayerId(engine);
-  const activeName = state.players.find((p) => p.id === activeId)?.name ?? activeId ?? "—";
+  if (!identity || !visibleState) return null;
 
-  if (state.state === "finished") {
-    return <FinalReveal engine={engine} onExit={onExit} />;
+  if (visibleState.state === "finished") {
+    return <FinalReveal remote={remote} />;
   }
 
-  if (state.state === "initial_reveal" && !dealingDone) {
-    const handSize = state.players[0]?.hand.length ?? 4;
+  if (visibleState.state === "initial_reveal" && !dealingDone) {
+    const handSize = visibleState.myHand?.length ?? 4;
     return (
       <Dealing
-        players={state.players.map((p) => ({ id: p.id, name: p.name }))}
+        players={visibleState.players.map((p) => ({ id: p.id, name: p.name }))}
         handSize={handSize}
         onComplete={() => setDealingDone(true)}
       />
     );
   }
 
-  if (activeId === null) {
+  if (visibleState.state === "initial_reveal") {
+    if (validEvents.includes("ACKNOWLEDGE_REVEAL")) {
+      return <InitialReveal remote={remote} />;
+    }
     return (
-      <div className="screen done">
-        <h2>No active player</h2>
-        <p className="muted">The game is in an unexpected state.</p>
-        <button type="button" className="primary big" onClick={onExit}>
-          Back to lobby
-        </button>
+      <div className="screen reveal">
+        <h2>Waiting for the other players to acknowledge…</h2>
+        <p className="muted">Play starts as soon as everyone has memorized their hand.</p>
       </div>
     );
   }
 
-  if (gateClosed) {
-    const context = state.state === "initial_reveal" ? "Initial reveal" : "Your turn";
-    return <PassDeviceGate playerName={activeName} context={context} onReady={() => setGateClosed(false)} />;
-  }
-
-  if (state.state === "initial_reveal") {
-    return <InitialReveal engine={engine} playerId={activeId} dispatch={dispatch} onDone={() => setGateClosed(true)} />;
-  }
-
-  // in_progress or showdown
-  return (
-    <TurnView
-      engine={engine}
-      playerId={activeId}
-      dispatch={dispatch}
-      cue={cue}
-      onTurnEnd={() => setGateClosed(true)}
-      onExit={onExit}
-    />
-  );
+  const myTurn = visibleState.players[visibleState.currentTurn]?.id === identity.playerId;
+  if (myTurn) return <TurnView remote={remote} />;
+  return <SpectatorView remote={remote} />;
 }

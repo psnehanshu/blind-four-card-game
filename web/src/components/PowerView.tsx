@@ -1,19 +1,12 @@
 import { useState } from "react";
-import type { GameEngine } from "../../../engine/game-engine.js";
-import type { BasePowerAction, PeekResult, PowerAction, Rank, VisibleGameState } from "../../../engine/types.js";
+import type { BasePowerAction, PowerAction, Rank, VisibleGameState } from "../../../engine/types.js";
 import { HAND_SIZE } from "../../../engine/types.js";
-import type { Dispatch } from "../game/useEngine.js";
+import type { RemoteEngine } from "../net/useRemoteEngine.js";
 import { CardView } from "./CardView.js";
 import { tiltForSlot } from "../util/rand.js";
 
 interface Props {
-  engine: GameEngine;
-  playerId: string;
-  dispatch: Dispatch;
-  /** Called after USE_POWER resolves successfully. When the resolved power was a
-   *  peek, `result` carries the peeked cards (to display privately); otherwise
-   *  it's null. */
-  onResolved: (result: { playerName: string; cards: PeekResult["cards"] } | null) => void;
+  remote: RemoteEngine;
 }
 
 type Stage =
@@ -27,8 +20,11 @@ const POWER_LABEL: Record<"10" | "J" | "Q" | "K", string> = {
   K: "Lock",
 };
 
-export function PowerView({ engine, playerId, dispatch, onResolved }: Props) {
-  const visible = engine.getVisibleState(playerId);
+export function PowerView({ remote }: Props) {
+  const { identity, visibleState, dispatch, lastError } = remote;
+  if (!identity || !visibleState) return null;
+  const visible = visibleState;
+  const playerId = identity.playerId;
   const discardTop = visible.discardPile.at(-1);
   const topRank: Rank | undefined = discardTop?.rank;
 
@@ -37,28 +33,13 @@ export function PowerView({ engine, playerId, dispatch, onResolved }: Props) {
     if (topRank === "10" || topRank === "J" || topRank === "Q" || topRank === "K") {
       return { kind: "power", rank: topRank, wrap: (a) => a };
     }
-    // Defensive fallback — shouldn't happen if validEvents.includes(USE_POWER)
     return { kind: "power", rank: "10", wrap: (a) => a };
   });
-  const [error, setError] = useState<string | null>(null);
 
   function submit(action: BasePowerAction, wrap: (a: BasePowerAction) => PowerAction) {
-    setError(null);
-    const final: PowerAction = wrap(action);
-    const result = dispatch(playerId, "USE_POWER", final);
-    if (result.error) {
-      setError(result.error);
-      return;
-    }
-    if (result.peekResult) {
-      const peeked = visible.players.find((p) => p.id === result.peekResult?.playerId);
-      onResolved({
-        playerName: peeked?.name ?? result.peekResult.playerId,
-        cards: result.peekResult.cards,
-      });
-    } else {
-      onResolved(null);
-    }
+    dispatch("USE_POWER", wrap(action));
+    // Peek result is delivered via the next STATE push (peekResult field).
+    // TurnView observes that and shows the peek dialog.
   }
 
   if (stage.kind === "pick-joker-rank") {
@@ -80,7 +61,6 @@ export function PowerView({ engine, playerId, dispatch, onResolved }: Props) {
                     if (r === "J" && a.power === "shuffle") return { power: "joker", mimicRank: r, action: a };
                     if (r === "Q" && a.power === "swap") return { power: "joker", mimicRank: r, action: a };
                     if (r === "K" && a.power === "lock") return { power: "joker", mimicRank: r, action: a };
-                    // Unreachable: rank gates the form, which produces the matching power kind.
                     throw new Error("Joker wrap mismatch");
                   },
                 })
@@ -103,7 +83,7 @@ export function PowerView({ engine, playerId, dispatch, onResolved }: Props) {
       {stage.rank === "J" && <ShuffleForm visible={visible} playerId={playerId} onSubmit={(a) => submit(a, stage.wrap)} />}
       {stage.rank === "Q" && <SwapForm visible={visible} onSubmit={(a) => submit(a, stage.wrap)} />}
       {stage.rank === "K" && <LockForm visible={visible} onSubmit={(a) => submit(a, stage.wrap)} />}
-      {error && <div className="error">{error}</div>}
+      {lastError && <div className="error">{lastError}</div>}
     </section>
   );
 }

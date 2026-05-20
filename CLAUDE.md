@@ -4,34 +4,38 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project scope
 
-This is **`blind-four`** — the full game, not just the rules. The repo will grow to host multiple **form factors** (web, mobile, terminal UI, …), all sharing a single deterministic game engine. As of this writing the engine and a `web/` form factor exist.
+This is **`blind-four`** — the full game, not just the rules. The repo hosts a deterministic game engine, a socket.io-backed game server, and one or more **form factors** (today: a React + Vite web app). Form factors are thin views that talk to the server; the engine never duplicates.
 
 ## Repository layout
 
 ```
-engine/          Core game engine (TypeScript, no I/O). Shared by every form factor.
+engine/          Core game engine (TypeScript, no I/O). Shared by everything.
 engine/SPEC.md   Authoritative rules spec.
-web/             React + Vite hot-seat web UI. Imports the engine via relative path.
-<form-factor>/   Each new frontend lives in its own top-level folder (mobile/, terminal/, …).
-                 Add new ones as siblings of engine/.
+server/          Node + socket.io + SQLite server. Lives at root (shares root package.json/tsconfig).
+                 Imports the engine via relative path; persists every CommittedEvent.
+web/             React + Vite client. Its own package — needs JSX/DOM compiler settings.
+                 Talks to the server over socket.io; never owns engine state.
+<form-factor>/   New frontends (mobile, terminal, …) go in their own top-level folder
+                 alongside web/, with their own package.json + tsconfig.json.
 ```
+
+The engine + server share the **root** `package.json`, `tsconfig.json`, and `eslint.config.ts`. Only standalone clients (web, future mobile, etc.) carry their own package.
 
 When adding a new form factor:
 
-- give it its own folder and `package.json` (or convert the root to npm workspaces if multiple land)
-- consume the engine via a relative import; **never duplicate game logic**
-- treat the engine as server-authoritative even if the form factor runs everything locally — that's what makes a future networked client cheap
-- give it its own `tsconfig.json` (root tsconfig is engine-only — JSX/DOM needs per-form-factor compiler settings)
+- give it its own folder and `package.json` + `tsconfig.json` (JSX/DOM needs per-form-factor settings)
+- consume the engine via relative import; **never duplicate game logic**
+- talk to the server's wire protocol (`server/wire.ts`); never reach into engine state directly
+- treat the engine as server-authoritative; clients render `VisibleGameState` and dispatch events
 
 ## Commands
 
-Root scripts target the engine. Form factors have their own scripts in their own folder.
-
-- `npm test` — run all engine tests via `tsx --test engine/*.test.ts`
-- `npm run typecheck` — `tsc --noEmit` (engine-only — form factors carry their own tsconfig)
-- `npm run lint` — ESLint (root config ignores `web/dist`, `web/node_modules`, `web/.vite`)
+- `npm test` — engine + server tests (`tsx --test engine/*.test.ts server/*.test.ts`)
+- `npm run typecheck` — `tsc --noEmit` over `engine/**` and `server/**`
+- `npm run lint` — ESLint (root config ignores `web/dist`, `web/node_modules`, `web/.vite`, `server/data`)
 - `npm run format` / `npm run format:check` — Prettier write / check (also formats `web/src`)
 - `npm run sanity` — typecheck + lint + format:check + test, in that order. **Run this after every change.**
+- `npm run server:dev` — `tsx watch server/index.ts`, listens on `:3001`. DB file at `server/data/blind-four.db`.
 - Run a single test file: `tsx --test engine/rng.test.ts`
 - Run a single test by name: `tsx --test --test-name-pattern="same seed" engine/*.test.ts`
 
@@ -40,7 +44,7 @@ Root scripts target the engine. Form factors have their own scripts in their own
 From `web/`:
 
 - `npm install` (one-time)
-- `npm run dev` — Vite dev server on `:5173`
+- `npm run dev` — Vite dev server on `:5173`. Set `VITE_SERVER_URL` to override the default `http://localhost:3001`.
 - `npm run typecheck` — `tsc --noEmit` against `web/tsconfig.json`
 - `npm run build` / `npm run preview`
 
@@ -76,7 +80,18 @@ All four `applyPeek/Shuffle/Swap/Lock` take `BasePowerAction & { power: "<rank>"
 
 **Encapsulation.** `processEvent`'s `EngineResult`, `getVisibleState`, and `getEventLog` are `structuredClone`d before returning so callers can't mutate engine internals. **`getState()` returns the live internal `Game` reference** — documented escape hatch; some tests rely on it for state forcing.
 
-**Visibility.** `getVisibleState(playerId)` hides opponent hands always, and hides own hand except during `state === "initial_reveal"` or `state === "finished"`. `lockMarkers` and `discardPile` are public.
+**Visibility.** `getVisibleState(playerId)` hides opponent hands always, and hides own hand except during `state === "initial_reveal"` or `state === "finished"`. `lockMarkers` and `discardPile` are public. At `state === "finished"`, `allHands` is also populated — every player's hand is public per spec, and remote clients (which can't read `engine.getState()`) need it for the final reveal.
+
+## Server + persistence
+
+`server/` is a Node + socket.io server backed by SQLite (`better-sqlite3`). It owns the only `GameEngine` instance per game; clients talk to it via the wire types in `server/wire.ts`.
+
+- **`server/store.ts`** — SQLite wrapper with three append-only tables: `games` (lobby roster, frozen at start, plus seed), `events` (every `CommittedEvent`), `sessions` (per-player token used for reconnect).
+- **`server/game-manager.ts`** — in-memory `Map<gameId, GameEngine>`. On cache miss (cold start) hydrates via `GameEngine.fromEventLog(events, { gameId, playerIds, seed })`. No snapshots; the event log is the source of truth.
+- **`server/socket.ts`** — message handlers (`CREATE_GAME`, `JOIN_GAME`, `START_GAME`, `GAME_EVENT`). Every accepted event is persisted in a single SQLite transaction before any STATE is broadcast. `STATE` is built per-recipient so visibility (drawn card, peek result) is enforced server-side.
+- **`server/index.ts`** — HTTP server boot. `PORT` (default 3001) and `DB_PATH` (default `server/data/blind-four.db`) are env-overridable.
+
+**Identity / reconnect.** The first `WELCOME` returns a `sessionToken`; clients persist it in `localStorage["blind-four:<gameId>"]`. A subsequent `JOIN_GAME { gameId, sessionToken }` resumes the same seat without a new player.
 
 **RNG.** `engine/rng.ts` is a Mulberry32 `SeededRNG`. Seeds via `EngineConfig.seed` (defaults to `Date.now()`). Used for the initial deal and the J/shuffle power. Replay determinism depends on the same seed + same event order.
 

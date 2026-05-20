@@ -199,6 +199,12 @@ export class GameEngine {
       }
     }
 
+    // At finished, every hand is public — expose them in one place so remote
+    // clients can render the final reveal without reaching into private state.
+    if (this.game.state === "finished") {
+      result.allHands = this.game.players.map((p) => ({ playerId: p.id, hand: [...p.hand] }));
+    }
+
     return structuredClone(result);
   }
 

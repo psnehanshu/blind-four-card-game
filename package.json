@@ -4,15 +4,21 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "tsx --test engine/*.test.ts",
+    "test": "tsx --test engine/*.test.ts server/*.test.ts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "sanity": "npm run typecheck && npm run lint && npm run format:check && npm test"
+    "sanity": "npm run typecheck && npm run lint && npm run format:check && npm test",
+    "server:dev": "tsx watch server/index.ts"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.7.0",
+    "socket.io": "^4.8.1"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@types/better-sqlite3": "^7.6.12",
     "@types/node": "^25.8.0",
     "eslint": "^10.4.0",
     "jiti": "^2.7.0",

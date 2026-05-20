@@ -1,9 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import type { GameEngine } from "../../../engine/game-engine.js";
 import type { Card, EventPayloadMap, PeekResult, ProposedEventType } from "../../../engine/types.js";
-import type { Dispatch } from "../game/useEngine.js";
-import type { AnimationCue } from "../game/cue.js";
+import type { RemoteEngine } from "../net/useRemoteEngine.js";
 import { CardView } from "./CardView.js";
 import { PowerView } from "./PowerView.js";
 import { Dialog } from "./Dialog.js";
@@ -21,13 +19,7 @@ interface PeekDisplay {
 }
 
 interface Props {
-  engine: GameEngine;
-  playerId: string;
-  dispatch: Dispatch;
-  cue: AnimationCue;
-  /** Called once this player's turn has ended (END_TURN or CALL_SHOWDOWN committed). */
-  onTurnEnd: () => void;
-  onExit: () => void;
+  remote: RemoteEngine;
 }
 
 function rectCenter(el: HTMLElement | null): { x: number; y: number } | null {
@@ -36,11 +28,13 @@ function rectCenter(el: HTMLElement | null): { x: number; y: number } | null {
   return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
 }
 
-export function TurnView({ engine, playerId, dispatch, cue, onTurnEnd, onExit }: Props) {
-  const visible = engine.getVisibleState(playerId);
-  const valid = engine.getValidEvents(playerId);
-  const drawn: Card | null = engine.getDrawnCard(playerId);
-  const [error, setError] = useState<string | null>(null);
+export function TurnView({ remote }: Props) {
+  const { identity, visibleState, validEvents, drawnCard, cue, displayNames, dispatch, lastError, peekResult, clearPeek } =
+    remote;
+  if (!identity || !visibleState) return null;
+  const playerId = identity.playerId;
+  const visible = visibleState;
+  const drawn: Card | null = drawnCard;
   const [peekDisplay, setPeekDisplay] = useState<PeekDisplay | null>(null);
 
   // ───── Flight refs + state ─────
@@ -78,31 +72,22 @@ export function TurnView({ engine, playerId, dispatch, cue, onTurnEnd, onExit }:
   }
 
   const me = visible.players.find((p) => p.id === playerId);
-  const meName = me?.name ?? playerId;
+  const meName = displayNames[playerId] ?? me?.name ?? playerId;
   const opponents = visible.players.filter((p) => p.id !== playerId);
 
-  function tryDispatch<T extends ProposedEventType>(type: T, payload: EventPayloadMap[T]) {
-    setError(null);
-    const result = dispatch(playerId, type, payload);
-    if (result.error) {
-      setError(result.error);
-      return false;
-    }
-    return true;
+  function send<T extends ProposedEventType>(type: T, payload: EventPayloadMap[T]) {
+    dispatch(type, payload);
   }
 
   function drawFrom(source: "deck" | "discard") {
     const fromEl = source === "deck" ? deckRef.current : discardRef.current;
     const from = rectCenter(fromEl);
-    // For source=discard, capture the card BEFORE dispatch so we know what's flying.
     const sourceCardBefore: Card | null = source === "discard" ? (visible.discardPile.at(-1) ?? null) : null;
-
-    const ok = tryDispatch("DRAW_CARD", { source });
-    if (!ok || !from) return;
-
-    // After the engine has accepted the draw, the drawn slot mounts on the next render.
-    // Wait two frames so layout settles, then snapshot its position.
+    send("DRAW_CARD", { source });
+    if (!from) return;
     setDrawnHiddenForFlight(true);
+    // After the engine's STATE push arrives, drawnRef will be mounted.
+    // Two RAFs let the next render settle so we can snapshot the destination.
     requestAnimationFrame(() =>
       requestAnimationFrame(() => {
         const to = rectCenter(drawnRef.current);
@@ -110,14 +95,14 @@ export function TurnView({ engine, playerId, dispatch, cue, onTurnEnd, onExit }:
           setDrawnHiddenForFlight(false);
           return;
         }
-        const drawnCard = engine.getDrawnCard(playerId);
+        // After the STATE push, remote.drawnCard reflects the deck-drawn card.
+        const justDrawn = source === "deck" ? remote.drawnCard : null;
         pushFlight(
           {
             from,
             to,
-            // discard draws fly face-up; deck draws fly face-down and we reveal at arrival via the underlying slot.
             card: source === "discard" ? sourceCardBefore : null,
-            revealAt: source === "deck" ? drawnCard : null,
+            revealAt: source === "deck" ? justDrawn : null,
           },
           () => setDrawnHiddenForFlight(false),
         );
@@ -132,53 +117,37 @@ export function TurnView({ engine, playerId, dispatch, cue, onTurnEnd, onExit }:
     const discardRect = rectCenter(discardRef.current);
     const drawnBefore = drawn;
 
-    const ok = tryDispatch("REPLACE_CARD", { handIndex });
-    if (!ok || !drawnRect || !handRect || !discardRect || !drawnBefore) return;
-
-    // After dispatch: drawn slot will unmount, discard pile gets a new top
-    // (the just-replaced hand card). The hand slot stays hidden visually.
-    const replacedCard = engine.getVisibleState(playerId).discardPile.at(-1) ?? null;
+    send("REPLACE_CARD", { handIndex });
+    if (!drawnRect || !handRect || !discardRect || !drawnBefore) return;
 
     setHideDiscardTopForFlight(true);
 
-    // Flight 1: drawn slot → hand slot (the drawn card going into the hand).
     pushFlight({ from: drawnRect, to: handRect, card: drawnBefore, revealAt: null }, () => {
       /* no underlying-element update needed — hand slot was already hidden. */
     });
 
-    // Flight 2: hand slot → discard (the replaced card being discarded).
-    if (replacedCard) {
-      pushFlight({ from: handRect, to: discardRect, card: replacedCard, revealAt: null }, () => {
-        setHideDiscardTopForFlight(false);
-      });
-    } else {
-      // Defensive: clear the hide flag immediately if no replaced card surfaced.
+    // Hand slot → discard. We don't know which card was at handIndex (it was hidden
+    // before this turn), so the flight is face-down; the new discard top will reveal
+    // once the STATE push arrives and we drop hideDiscardTopForFlight.
+    pushFlight({ from: handRect, to: discardRect, card: null, revealAt: null }, () => {
       setHideDiscardTopForFlight(false);
-    }
+    });
   }
 
   function discardDrawn() {
     const from = rectCenter(drawnRef.current);
     const to = rectCenter(discardRef.current);
-    // Snapshot the currently-drawn card before dispatch so we can fly its face-up.
     const drawnBefore = drawn;
-    const ok = tryDispatch("DISCARD_DRAWN", undefined);
-    if (!ok || !from || !to || !drawnBefore) return;
-
-    // The new discard-pile top (the just-discarded card) shouldn't pop in via its
-    // own entry animation while the flight is in transit — hide it until landed.
+    send("DISCARD_DRAWN", undefined);
+    if (!from || !to || !drawnBefore) return;
     setHideDiscardTopForFlight(true);
     pushFlight({ from, to, card: drawnBefore, revealAt: null }, () => setHideDiscardTopForFlight(false));
   }
 
   function endTurn() {
-    if (tryDispatch("END_TURN", undefined)) onTurnEnd();
+    send("END_TURN", undefined);
   }
 
-  // Swap power: when the cue lands, fly two face-down cards between the two
-  // affected slots on crossing arcs. The engine has already swapped them, so
-  // we hide both slots until each flight arrives — that way the visible card
-  // "leaves" and the new one "arrives" instead of teleporting.
   useEffect(() => {
     if (cue?.kind !== "swap") return;
     const aKey = `${cue.a.playerId}-${cue.a.cardIndex}`;
@@ -224,49 +193,44 @@ export function TurnView({ engine, playerId, dispatch, cue, onTurnEnd, onExit }:
     setFlights((prev) => [...prev, flightA, flightB]);
   }, [cue]);
 
+  // Surface the server's peek result to the player who triggered it.
+  useEffect(() => {
+    if (!peekResult) return;
+    const target = visible.players.find((p) => p.id === peekResult.playerId);
+    const targetName = displayNames[peekResult.playerId] ?? target?.name ?? peekResult.playerId;
+    setPeekDisplay({ playerName: targetName, cards: peekResult.cards });
+    playPeek();
+    clearPeek();
+  }, [peekResult, visible.players, displayNames, clearPeek]);
+
   function callShowdown() {
-    if (tryDispatch("CALL_SHOWDOWN", undefined)) {
-      playShowdown();
-      onTurnEnd();
-    }
+    send("CALL_SHOWDOWN", undefined);
+    playShowdown();
   }
 
-  function showPeek(result: PeekDisplay | null) {
-    if (result) playPeek();
-    setPeekDisplay(result);
-  }
-
-  // Lock markers for this player so we can render the K/Joker face-up on top of locked slots.
   const myMarkers = new Map(
     visible.lockMarkers.filter((lm) => lm.playerId === playerId).map((lm) => [lm.cardIndex, lm.markerCard]),
   );
   const handSize = me?.handSize ?? 4;
 
-  const canDraw = valid.includes("DRAW_CARD");
-  // REPLACE_CARD is offered any time there's a drawn card; DISCARD_DRAWN is
-  // only available for deck-drawn cards (discard-drawn cards must be played
-  // into the hand). The two are intentionally separate signals.
-  const canReplace = valid.includes("REPLACE_CARD");
-  const canDiscardDrawn = valid.includes("DISCARD_DRAWN");
-  const inPower = valid.includes("USE_POWER");
-  const canEnd = valid.includes("END_TURN");
-  const canShowdown = valid.includes("CALL_SHOWDOWN");
+  const canDraw = validEvents.includes("DRAW_CARD");
+  const canReplace = validEvents.includes("REPLACE_CARD");
+  const canDiscardDrawn = validEvents.includes("DISCARD_DRAWN");
+  const inPower = validEvents.includes("USE_POWER");
+  const canEnd = validEvents.includes("END_TURN");
+  const canShowdown = validEvents.includes("CALL_SHOWDOWN");
 
   function shuffleNonceFor(handPlayerId: string): number | undefined {
     if (cue?.kind === "shuffle" && cue.targetPlayerId === handPlayerId) return cue.nonce;
     return undefined;
   }
 
-  // For hiding the discard pile's new top while a discard flight is in progress.
   const renderedDiscardPile = hideDiscardTopForFlight ? visible.discardPile.slice(0, -1) : visible.discardPile;
 
   return (
     <div className="screen turn">
       <header className="turn-header">
         <h2>{meName}&rsquo;s turn</h2>
-        <button type="button" className="ghost small" onClick={onExit}>
-          Exit to lobby
-        </button>
       </header>
 
       <AnimatePresence>
@@ -279,7 +243,11 @@ export function TurnView({ engine, playerId, dispatch, cue, onTurnEnd, onExit }:
             transition={{ type: "spring", stiffness: 260, damping: 22 }}
           >
             <strong>
-              Showdown called by {visible.players.find((p) => p.id === visible.callerId)?.name ?? visible.callerId}.
+              Showdown called by{" "}
+              {displayNames[visible.callerId ?? ""] ??
+                visible.players.find((p) => p.id === visible.callerId)?.name ??
+                visible.callerId}
+              .
             </strong>
             <span> This is your final turn.</span>
           </motion.div>
@@ -295,7 +263,7 @@ export function TurnView({ engine, playerId, dispatch, cue, onTurnEnd, onExit }:
             );
             return (
               <div key={op.id} className="opponent">
-                <span className="opponent-name">{op.name}</span>
+                <span className="opponent-name">{displayNames[op.id] ?? op.name}</span>
                 <Hand className="hand small" shakeNonce={shuffleNonceFor(op.id)}>
                   {Array.from({ length: op.handSize }).map((_, i) => {
                     const marker = markers.get(i);
@@ -356,9 +324,6 @@ export function TurnView({ engine, playerId, dispatch, cue, onTurnEnd, onExit }:
           </button>
         </div>
 
-        {/* Drawn slot — always mounted when there's a drawn card, but visually
-            hidden while a draw flight is animating to it. The flight overlay
-            provides the entry "feel" instead of an in-place scale animation. */}
         {drawn && (
           <div className="pile drawn" style={{ opacity: drawnHiddenForFlight ? 0 : 1 }}>
             <span className="pile-label">You drew</span>
@@ -375,7 +340,6 @@ export function TurnView({ engine, playerId, dispatch, cue, onTurnEnd, onExit }:
             )}
           </div>
         )}
-        {/* Reserve the slot area so layout doesn't jump while the drawn pile mounts. */}
         {!drawn && <div className="pile drawn placeholder-slot" aria-hidden="true" />}
       </section>
 
@@ -418,13 +382,8 @@ export function TurnView({ engine, playerId, dispatch, cue, onTurnEnd, onExit }:
         </Hand>
       </section>
 
-      {/* Defer opening the power dialog until any in-flight cards have landed —
-          a native <dialog> renders in the browser's top layer (above z-index),
-          which would otherwise cover a flying card mid-arc. */}
       <Dialog open={inPower && !peekDisplay && flights.length === 0}>
-        {inPower && !peekDisplay && (
-          <PowerView engine={engine} playerId={playerId} dispatch={dispatch} onResolved={showPeek} />
-        )}
+        {inPower && !peekDisplay && <PowerView remote={remote} />}
       </Dialog>
 
       <Dialog open={!!peekDisplay}>
@@ -459,7 +418,7 @@ export function TurnView({ engine, playerId, dispatch, cue, onTurnEnd, onExit }:
         </section>
       )}
 
-      {error && <div className="error">{error}</div>}
+      {lastError && <div className="error">{lastError}</div>}
 
       <FlightLayer flights={flights} />
     </div>

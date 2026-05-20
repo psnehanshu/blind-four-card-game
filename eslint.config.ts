@@ -4,7 +4,7 @@ import { defineConfig } from "eslint/config";
 import tseslint from "typescript-eslint";
 
 export default defineConfig(
-  { ignores: ["web/dist/**", "web/node_modules/**", "web/.vite/**"] },
+  { ignores: ["web/dist/**", "web/node_modules/**", "web/.vite/**", "server/data/**"] },
   js.configs.recommended,
   tseslint.configs.strict,
   tseslint.configs.stylistic,
