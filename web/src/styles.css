@@ -214,6 +214,21 @@ button.slot-btn:hover:not(:disabled) {
   justify-content: center;
   position: relative;
   font-weight: 700;
+  overflow: hidden;
+}
+
+.card-face {
+  background: #fff;
+  padding: 0;
+}
+
+.card-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  user-select: none;
+  -webkit-user-drag: none;
 }
 
 .card-sm {

@@ -1,15 +1,38 @@
 import { AnimatePresence, motion } from "motion/react";
 import type { HTMLMotionProps } from "motion/react";
-import type { Card, Suit } from "../../../engine/types.js";
+import type { Card, Rank, Suit } from "../../../engine/types.js";
 
-const SUIT_GLYPH: Record<Suit, string> = {
-  hearts: "♥",
-  diamonds: "♦",
-  clubs: "♣",
-  spades: "♠",
+const RANK_SLUG: Record<Exclude<Rank, "JOKER">, string> = {
+  A: "ace",
+  "2": "2",
+  "3": "3",
+  "4": "4",
+  "5": "5",
+  "6": "6",
+  "7": "7",
+  "8": "8",
+  "9": "9",
+  "10": "10",
+  J: "jack",
+  Q: "queen",
+  K: "king",
 };
 
-const RED_SUITS: Suit[] = ["hearts", "diamonds"];
+function cardImageSrc(card: Card): string {
+  if (card.rank === "JOKER") {
+    const trailing = card.id.match(/(\d+)$/);
+    const isRed = trailing ? Number(trailing[1]) % 2 === 1 : false;
+    return `/cards/${isRed ? "red" : "black"}_joker.svg`;
+  }
+  if (!card.suit) throw new Error(`Non-joker card missing suit: ${card.id}`);
+  return `/cards/${RANK_SLUG[card.rank]}_of_${card.suit}.svg`;
+}
+
+function cardAltText(card: Card): string {
+  if (card.rank === "JOKER") return "Joker";
+  const suit: Suit | undefined = card.suit;
+  return `${card.rank}${suit ? ` of ${suit}` : ""}`;
+}
 
 interface Props {
   card?: Card;
@@ -87,34 +110,22 @@ interface FaceProps {
 
 function CardFace({ card, hidden, size, tilt, locked }: FaceProps) {
   const classes = ["card", `card-${size}`];
-  if (hidden) classes.push("card-hidden");
+  if (hidden || !card) classes.push("card-hidden");
+  else classes.push("card-face");
   if (locked) classes.push("card-locked");
   const cardStyle = tilt !== undefined && tilt !== 0 ? { transform: `rotate(${tilt}deg)` } : undefined;
 
-  let body;
   if (hidden || !card) {
-    body = <span className="card-back">?</span>;
-  } else if (card.rank === "JOKER") {
-    body = (
-      <>
-        <span className="card-rank">JOKER</span>
-        <span className="card-value">20</span>
-      </>
-    );
-  } else {
-    const isRed = card.suit && RED_SUITS.includes(card.suit);
-    if (isRed) classes.push("card-red");
-    body = (
-      <>
-        <span className="card-rank">{card.rank}</span>
-        <span className="card-suit">{card.suit ? SUIT_GLYPH[card.suit] : ""}</span>
-      </>
+    return (
+      <div className={classes.join(" ")} style={cardStyle}>
+        <span className="card-back">?</span>
+      </div>
     );
   }
 
   return (
     <div className={classes.join(" ")} style={cardStyle}>
-      {body}
+      <img className="card-img" src={cardImageSrc(card)} alt={cardAltText(card)} draggable={false} />
     </div>
   );
 }
