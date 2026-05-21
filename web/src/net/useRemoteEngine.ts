@@ -1,11 +1,25 @@
 import { useEffect, useReducer, useRef, useState } from "react";
-import type { Card, EventPayloadMap, PeekResult, ProposedEventType, VisibleGameState } from "../../../engine/types.js";
+import type {
+  Card,
+  EventPayloadMap,
+  PeekResult,
+  ProposedEventType,
+  Rank,
+  VisibleGameState,
+} from "../../../engine/types.js";
 import type { ServerMsg } from "../../../server/wire.js";
+import { getCardValue } from "../../../engine/cards.js";
 import { send, subscribe } from "./socket.js";
 import { deriveCue, type AnimationCue } from "../game/cue.js";
-import { playForCue } from "../audio/sound.js";
+import { playForCue, playSadTrombone } from "../audio/sound.js";
 
 const CUE_TIMEOUT_MS = 900;
+/** Low-value cards worth keeping; trading any of these for a bigger card is a regret moment. */
+const SAD_DISCARD_RANKS = new Set<Rank>(["A", "2", "3", "7"]);
+
+function isObj(p: unknown): p is Record<string, unknown> {
+  return !!p && typeof p === "object";
+}
 
 export interface RemoteIdentity {
   gameId: string;
@@ -68,6 +82,12 @@ export function useRemoteEngine(initial: InitialAction): RemoteEngine {
   const initialFiredRef = useRef(false);
   const identityRef = useRef<RemoteIdentity | null>(null);
   identityRef.current = identity;
+  // For the "sad trombone" cue: we need to know what card the active player
+  // just drew when REPLACE_CARD lands. The actor sees it via msg.drawnCard;
+  // observers can infer it only when the draw came from the (face-up) discard
+  // pile, by remembering the pile's top before the draw event.
+  const knownDrawnCardRef = useRef<Card | null>(null);
+  const prevDiscardTopRef = useRef<Card | null>(null);
 
   // Subscribe to server messages.
   useEffect(() => {
@@ -92,6 +112,9 @@ export function useRemoteEngine(initial: InitialAction): RemoteEngine {
         return;
       }
       if (msg.kind === "STATE") {
+        const prevDiscardTop = prevDiscardTopRef.current;
+        const newDiscardTop = msg.visibleState.discardPile.at(-1) ?? null;
+
         setVisibleState(msg.visibleState);
         setValidEvents(msg.validEvents);
         setDrawnCard(msg.drawnCard);
@@ -101,6 +124,31 @@ export function useRemoteEngine(initial: InitialAction): RemoteEngine {
         if (msg.peekResult) setPeekResult(msg.peekResult);
         // Animation cues + sound: replay each newly-committed event through deriveCue.
         for (const e of msg.lastEvents) {
+          // Track drawn card across events so we can compare it to the
+          // discarded hand card when a REPLACE_CARD lands.
+          if (e.type === "DRAW_CARD") {
+            const source = isObj(e.payload) ? e.payload.source : undefined;
+            if (source === "discard") {
+              knownDrawnCardRef.current = prevDiscardTop;
+            } else if (source === "deck") {
+              // msg.drawnCard is non-null only for the player who drew.
+              knownDrawnCardRef.current = msg.drawnCard;
+            }
+          } else if (e.type === "REPLACE_CARD") {
+            const discarded = newDiscardTop;
+            const drawn = knownDrawnCardRef.current;
+            if (
+              discarded &&
+              drawn &&
+              SAD_DISCARD_RANKS.has(discarded.rank) &&
+              getCardValue(drawn.rank) > getCardValue(discarded.rank)
+            ) {
+              playSadTrombone();
+            }
+            knownDrawnCardRef.current = null;
+          } else if (e.type === "DISCARD_DRAWN") {
+            knownDrawnCardRef.current = null;
+          }
           nonceRef.current += 1;
           const next = deriveCue(e.type, e.payload, nonceRef.current, e.playerId);
           if (next) {
@@ -108,6 +156,12 @@ export function useRemoteEngine(initial: InitialAction): RemoteEngine {
             playForCue(next);
           }
         }
+        // Reconnect / cold-resume: if the server says we hold a drawn card
+        // but we never saw the DRAW event, seed the ref from it.
+        if (msg.drawnCard && !knownDrawnCardRef.current) {
+          knownDrawnCardRef.current = msg.drawnCard;
+        }
+        prevDiscardTopRef.current = newDiscardTop;
         return;
       }
       if (msg.kind === "ERROR") {

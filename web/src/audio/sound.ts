@@ -27,6 +27,7 @@ interface Voices {
   padReverb: Tone.Reverb;
   padGain: Tone.Gain;
   yourTurn: Tone.Player;
+  sad: Tone.MonoSynth;
 }
 
 let voices: Voices | null = null;
@@ -143,6 +144,31 @@ export async function startAudio(): Promise<void> {
   // ── sampled "your turn" cue (bypasses reverb so the spoken cue stays crisp)
   const yourTurn = new Tone.Player({ url: "/your-turn.mp3", volume: -4 }).connect(master);
 
+  // ── sad trombone: brassy sawtooth through a lowpass + portamento so notes
+  // glide into each other (the slide is what makes "wah-wah-waaah" register
+  // as a trombone rather than a series of bell pings). Extra reverb tail to
+  // exaggerate the dejected, drawn-out feel.
+  const sad = new Tone.MonoSynth({
+    oscillator: { type: "sawtooth" },
+    filter: { Q: 2.4, type: "lowpass", rolloff: -24 },
+    filterEnvelope: {
+      attack: 0.04,
+      decay: 0.35,
+      sustain: 0.45,
+      release: 0.8,
+      baseFrequency: 220,
+      octaves: 2.2,
+    },
+    envelope: {
+      attack: 0.05,
+      decay: 0.2,
+      sustain: 0.85,
+      release: 0.7,
+    },
+    portamento: 0.12,
+    volume: -10,
+  }).connect(reverb);
+
   voices = {
     master,
     reverb,
@@ -158,6 +184,7 @@ export async function startAudio(): Promise<void> {
     padReverb,
     padGain,
     yourTurn,
+    sad,
   };
   // Wait for sampled buffers (yourTurn) to finish loading before reporting ready,
   // so the first turn-start fires audibly instead of being silently dropped.
@@ -236,6 +263,30 @@ export function playWin(): void {
 export function playButton(): void {
   if (!voices) return;
   voices.tone.triggerAttackRelease("C5", "32n", nextTime("tone"), 0.4);
+}
+
+/**
+ * Classic "wah-wah-waaaaah" sad trombone. Two short hits, then a held final
+ * note that sags down a tritone via portamento — the bend is what sells the
+ * dejection, vs. discrete notes which read as chime/bell.
+ */
+export function playSadTrombone(): void {
+  if (!voices) return;
+  const s = voices.sad;
+  const t0 = nextTime("sad");
+  // "wah"
+  s.triggerAttack("G4", t0, 0.9);
+  s.triggerRelease(t0 + 0.22);
+  // "wah"
+  s.triggerAttack("F4", t0 + 0.34, 0.85);
+  s.triggerRelease(t0 + 0.56);
+  // "waaaaaaaaah" — held while the pitch slumps down two more half-steps,
+  // then deflates an extra step before release.
+  s.triggerAttack("Eb4", t0 + 0.7, 0.8);
+  s.setNote("D4", t0 + 1.1);
+  s.setNote("B3", t0 + 1.55);
+  s.triggerRelease(t0 + 1.95);
+  lastTime.set("sad", t0 + 1.95);
 }
 
 export function playYourTurn(): void {
