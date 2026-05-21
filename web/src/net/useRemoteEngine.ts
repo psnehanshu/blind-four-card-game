@@ -102,7 +102,7 @@ export function useRemoteEngine(initial: InitialAction): RemoteEngine {
         // Animation cues + sound: replay each newly-committed event through deriveCue.
         for (const e of msg.lastEvents) {
           nonceRef.current += 1;
-          const next = deriveCue(e.type, e.payload, nonceRef.current);
+          const next = deriveCue(e.type, e.payload, nonceRef.current, e.playerId);
           if (next) {
             setCue(next);
             playForCue(next);

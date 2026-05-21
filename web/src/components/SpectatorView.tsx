@@ -22,8 +22,10 @@ function rectCenter(el: HTMLElement | null): { x: number; y: number } | null {
 export function SpectatorView({ remote }: Props) {
   const { identity, visibleState, displayNames, cue } = remote;
   const slotRefs = useRef<Map<string, HTMLElement | null>>(new Map());
+  const discardRef = useRef<HTMLDivElement | null>(null);
   const [flights, setFlights] = useState<Flight[]>([]);
   const [hiddenSlots, setHiddenSlots] = useState<Set<string>>(new Set());
+  const [hideDiscardTopForFlight, setHideDiscardTopForFlight] = useState(false);
 
   // Swap animation when watching from the sidelines.
   useEffect(() => {
@@ -69,9 +71,50 @@ export function SpectatorView({ remote }: Props) {
     ]);
   }, [cue]);
 
-  if (!identity || !visibleState) return null;
+  const myId = identity?.playerId;
+
+  // Opponent discards (REPLACE_CARD + DISCARD_DRAWN): fly a card from the
+  // actor's hand area to the discard pile. Skips the current player — their
+  // own TurnView already ran the local handler before we got the STATE push.
+  useEffect(() => {
+    if (!cue || !visibleState || !myId) return;
+    if (cue.kind !== "replace" && cue.kind !== "discard") return;
+    if (cue.actorId === myId) return;
+
+    const toCenter = rectCenter(discardRef.current);
+    if (!toCenter) return;
+    const discardedCard = visibleState.discardPile.at(-1) ?? null;
+
+    let fromCenter: { x: number; y: number } | null = null;
+    if (cue.kind === "replace") {
+      fromCenter = rectCenter(slotRefs.current.get(`${cue.actorId}-${cue.handIndex}`) ?? null);
+    } else {
+      // No specific slot for DISCARD_DRAWN — synthesize a source above the
+      // actor's hand center, mimicking where the held card would have been.
+      const slot0 = rectCenter(slotRefs.current.get(`${cue.actorId}-0`) ?? null);
+      if (slot0) fromCenter = { x: slot0.x, y: slot0.y - 80 };
+    }
+    if (!fromCenter) return;
+
+    const id = `op-discard-${cue.nonce}`;
+    setHideDiscardTopForFlight(true);
+    setFlights((prev) => [
+      ...prev,
+      {
+        id,
+        card: discardedCard,
+        from: fromCenter,
+        to: toCenter,
+        onComplete: () => {
+          setFlights((p) => p.filter((f) => f.id !== id));
+          setHideDiscardTopForFlight(false);
+        },
+      },
+    ]);
+  }, [cue, visibleState, myId]);
+
+  if (!identity || !visibleState || !myId) return null;
   const visible = visibleState;
-  const myId = identity.playerId;
   const currentPlayer = visible.players[visible.currentTurn];
   const currentName = currentPlayer ? playerNameFor(currentPlayer.id, myId, displayNames, currentPlayer.name) : "—";
 
@@ -164,7 +207,9 @@ export function SpectatorView({ remote }: Props) {
         </div>
         <div className="pile">
           <span className="pile-label">Discard ({visible.discardPile.length})</span>
-          <DiscardStack cards={visible.discardPile} />
+          <div ref={discardRef}>
+            <DiscardStack cards={hideDiscardTopForFlight ? visible.discardPile.slice(0, -1) : visible.discardPile} />
+          </div>
         </div>
         <div className="pile drawn placeholder-slot" aria-hidden="true" />
       </section>

@@ -16,9 +16,9 @@ export type AnimationCue =
       b: { playerId: string; cardIndex: number };
     }
   | { kind: "lock"; nonce: number; targetPlayerId: string; cardIndex: number }
-  | { kind: "draw"; nonce: number; source: "deck" | "discard" }
-  | { kind: "discard"; nonce: number }
-  | { kind: "replace"; nonce: number; handIndex: number }
+  | { kind: "draw"; nonce: number; source: "deck" | "discard"; actorId: string }
+  | { kind: "discard"; nonce: number; actorId: string }
+  | { kind: "replace"; nonce: number; actorId: string; handIndex: number }
   | null;
 
 function isObj(p: unknown): p is Record<string, unknown> {
@@ -34,19 +34,24 @@ function isObj(p: unknown): p is Record<string, unknown> {
  * against a literal. The engine guarantees type/payload match at runtime;
  * these structural checks are defensive.
  */
-export function deriveCue<T extends ProposedEventType>(type: T, payload: EventPayloadMap[T], nonce: number): AnimationCue {
+export function deriveCue<T extends ProposedEventType>(
+  type: T,
+  payload: EventPayloadMap[T],
+  nonce: number,
+  actorId: string,
+): AnimationCue {
   const raw: unknown = payload;
   if (type === "DRAW_CARD" && isObj(raw)) {
     const src = raw.source;
-    if (src === "deck" || src === "discard") return { kind: "draw", nonce, source: src };
+    if (src === "deck" || src === "discard") return { kind: "draw", nonce, source: src, actorId };
     return null;
   }
   if (type === "REPLACE_CARD" && isObj(raw)) {
     const idx = raw.handIndex;
-    if (typeof idx === "number") return { kind: "replace", nonce, handIndex: idx };
+    if (typeof idx === "number") return { kind: "replace", nonce, actorId, handIndex: idx };
     return null;
   }
-  if (type === "DISCARD_DRAWN") return { kind: "discard", nonce };
+  if (type === "DISCARD_DRAWN") return { kind: "discard", nonce, actorId };
   if (type === "USE_POWER" && isObj(raw)) return derivePowerCue(raw, nonce);
   return null;
 }
