@@ -59,7 +59,11 @@ body {
 
 .screen {
   min-height: 100vh;
-  padding: 24px 20px 48px;
+  /* viewport-fit=cover lets content extend under the notch / home indicator;
+     env(safe-area-inset-*) values give back the device-reserved gutters so
+     headers and buttons don't disappear behind them in fullscreen. */
+  padding: calc(24px + env(safe-area-inset-top)) calc(20px + env(safe-area-inset-right))
+    calc(48px + env(safe-area-inset-bottom)) calc(20px + env(safe-area-inset-left));
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -446,7 +450,7 @@ button.slot-btn:hover:not(:disabled) {
    tappable; only the card and its button capture clicks. */
 .drawn-closeup {
   position: fixed;
-  top: 14%;
+  top: calc(14% + env(safe-area-inset-top));
   left: 50%;
   transform: translateX(-50%);
   z-index: 60;

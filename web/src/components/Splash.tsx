@@ -73,7 +73,6 @@ export function Splash({ onReady }: Props) {
   return (
     <div className="screen splash">
       <h1>Blind Four</h1>
-      <p className="muted">Hot-seat card game with synthesized sound.</p>
 
       {mode === "menu" && (
         <div className="splash-actions">
@@ -126,7 +125,6 @@ export function Splash({ onReady }: Props) {
 
       {hint && <p className="muted small-note">{hint}</p>}
       {error && <div className="error">{error}</div>}
-      <p className="muted small-note">Tap to enable audio. The browser requires a gesture before any sound can play.</p>
     </div>
   );
 }
