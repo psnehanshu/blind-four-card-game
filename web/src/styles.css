@@ -225,7 +225,7 @@ button.slot-btn:hover:not(:disabled) {
 .card {
   background: var(--card-bg);
   color: var(--card-fg);
-  border-radius: 10px;
+  border-radius: 4px;
   box-shadow: var(--shadow);
   display: flex;
   flex-direction: column;
@@ -467,11 +467,12 @@ button.slot-btn:hover:not(:disabled) {
 
 .drawn-closeup-card {
   /* Reserve layout space equal to the scaled card so the button below sits
-     clear of it visually AND in hit-testing. (size="md" is 70×100;
-     scale(2) → 140×200.) Scaling happens on the inner wrapper, sized to
-     the un-scaled card, so transformed visual extent === container layout. */
-  width: 140px;
-  height: 200px;
+     clear of it visually AND in hit-testing. (size="md" is 70×100; container
+     dimensions must match DRAWN_CLOSEUP_SCALE × 70×100 in TurnView.) Scaling
+     happens on the inner wrapper, sized to the un-scaled card, so transformed
+     visual extent === container layout. */
+  width: 182px;
+  height: 260px;
   display: flex;
   align-items: center;
   justify-content: center;

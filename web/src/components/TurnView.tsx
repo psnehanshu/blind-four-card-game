@@ -19,7 +19,7 @@ interface PeekDisplay {
   cards: PeekResult["cards"];
 }
 
-const DRAWN_CLOSEUP_SCALE = 2;
+const DRAWN_CLOSEUP_SCALE = 2.6;
 
 interface Props {
   remote: RemoteEngine;
