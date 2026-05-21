@@ -1,32 +1,7 @@
 import { AnimatePresence, motion } from "motion/react";
 import type { HTMLMotionProps } from "motion/react";
-import type { Card, Rank, Suit } from "../../../engine/types.js";
-
-const RANK_SLUG: Record<Exclude<Rank, "JOKER">, string> = {
-  A: "ace",
-  "2": "2",
-  "3": "3",
-  "4": "4",
-  "5": "5",
-  "6": "6",
-  "7": "7",
-  "8": "8",
-  "9": "9",
-  "10": "10",
-  J: "jack",
-  Q: "queen",
-  K: "king",
-};
-
-function cardImageSrc(card: Card): string {
-  if (card.rank === "JOKER") {
-    const trailing = card.id.match(/(\d+)$/);
-    const isRed = trailing ? Number(trailing[1]) % 2 === 1 : false;
-    return `/cards/${isRed ? "red" : "black"}_joker.svg`;
-  }
-  if (!card.suit) throw new Error(`Non-joker card missing suit: ${card.id}`);
-  return `/cards/${RANK_SLUG[card.rank]}_of_${card.suit}.svg`;
-}
+import type { Card, Suit } from "../../../engine/types.js";
+import { cardImageSrc } from "../util/cardAssets.js";
 
 function cardAltText(card: Card): string {
   if (card.rank === "JOKER") return "Joker";
