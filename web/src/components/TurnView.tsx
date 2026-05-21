@@ -22,7 +22,7 @@ interface PeekDisplay {
 const DRAWN_CLOSEUP_SCALE = 2.6;
 // After entering showdown_eligible, give the player a window before auto-ending.
 // Longer when showdown is a real choice; shorter buffer otherwise so animations land.
-const SHOWDOWN_WINDOW_MS = 5000;
+const SHOWDOWN_WINDOW_MS = 3000;
 const AUTO_END_BUFFER_MS = 1000;
 
 interface Props {
