@@ -288,7 +288,7 @@ export function TurnView({ remote }: Props) {
   const renderedDiscardPile = hideDiscardTopForFlight ? visible.discardPile.slice(0, -1) : visible.discardPile;
 
   return (
-    <div className="screen turn">
+    <div className="screen turn is-my-turn">
       <header className="turn-header">
         <h2>{meName}&rsquo;s turn</h2>
       </header>
@@ -359,7 +359,7 @@ export function TurnView({ remote }: Props) {
       </section>
 
       <section className="center-row">
-        <div className="pile">
+        <div className={`pile${canDraw && visible.deckSize > 0 ? " is-active" : ""}`}>
           <span className="pile-label">Deck ({visible.deckSize})</span>
           <div ref={deckRef}>
             <DeckStack size={visible.deckSize} />
@@ -374,7 +374,7 @@ export function TurnView({ remote }: Props) {
           </button>
         </div>
 
-        <div className="pile">
+        <div className={`pile${canDraw && visible.discardPile.length > 0 ? " is-active" : ""}`}>
           <span className="pile-label">Discard ({visible.discardPile.length})</span>
           <div ref={discardRef}>
             <DiscardStack cards={renderedDiscardPile} />

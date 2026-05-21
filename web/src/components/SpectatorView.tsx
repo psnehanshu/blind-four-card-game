@@ -166,7 +166,7 @@ export function SpectatorView({ remote }: Props) {
               visible.lockMarkers.filter((lm) => lm.playerId === op.id).map((lm) => [lm.cardIndex, lm.markerCard]),
             );
             return (
-              <div key={op.id} className="opponent">
+              <div key={op.id} className={`opponent${op.id === currentPlayer?.id ? " is-current" : ""}`}>
                 <span className="opponent-name">
                   {playerNameFor(op.id, myId, displayNames, op.name)}
                   {op.id === currentPlayer?.id && <span className="badge caller">TURN</span>}
