@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
+import type { Card } from "../../../engine/types.js";
 import type { RemoteEngine } from "../net/useRemoteEngine.js";
 import { CardView } from "./CardView.js";
 import { DeckStack, DiscardStack } from "./Pile.js";
@@ -22,10 +23,14 @@ function rectCenter(el: HTMLElement | null): { x: number; y: number } | null {
 export function SpectatorView({ remote }: Props) {
   const { identity, visibleState, displayNames, cue } = remote;
   const slotRefs = useRef<Map<string, HTMLElement | null>>(new Map());
+  const deckRef = useRef<HTMLDivElement | null>(null);
   const discardRef = useRef<HTMLDivElement | null>(null);
   const [flights, setFlights] = useState<Flight[]>([]);
   const [hiddenSlots, setHiddenSlots] = useState<Set<string>>(new Set());
   const [hideDiscardTopForFlight, setHideDiscardTopForFlight] = useState(false);
+  // Captures the discard top from the previous render so opponent draws from
+  // the discard pile can fly face-up — the new state has already removed it.
+  const prevDiscardTopRef = useRef<Card | null>(null);
 
   // Swap animation when watching from the sidelines.
   useEffect(() => {
@@ -112,6 +117,46 @@ export function SpectatorView({ remote }: Props) {
       },
     ]);
   }, [cue, visibleState, myId]);
+
+  // Opponent draws (DRAW_CARD): fly a card from the deck or discard pile to a
+  // "holding" position above the actor's hand. Skips the local player — their
+  // own TurnView shows the drawn card directly. For deck source the card flies
+  // face-down (its identity is private); for discard source we fly face-up
+  // using the captured previous-top, since the new state has already removed
+  // it from the pile.
+  useEffect(() => {
+    if (!cue || !visibleState || !myId) return;
+    if (cue.kind !== "draw") return;
+    if (cue.actorId === myId) return;
+
+    const fromEl = cue.source === "deck" ? deckRef.current : discardRef.current;
+    const fromCenter = rectCenter(fromEl);
+    if (!fromCenter) return;
+    const slot0 = rectCenter(slotRefs.current.get(`${cue.actorId}-0`) ?? null);
+    if (!slot0) return;
+    const toCenter = { x: slot0.x, y: slot0.y - 80 };
+
+    const flyingCard = cue.source === "discard" ? prevDiscardTopRef.current : null;
+    const id = `op-draw-${cue.nonce}`;
+    setFlights((prev) => [
+      ...prev,
+      {
+        id,
+        card: flyingCard,
+        from: fromCenter,
+        to: toCenter,
+        onComplete: () => {
+          setFlights((p) => p.filter((f) => f.id !== id));
+        },
+      },
+    ]);
+  }, [cue, visibleState, myId]);
+
+  // Track previous discard-pile top. Placed *after* the draw effect so that
+  // effect reads the prior-render value before this one overwrites it.
+  useEffect(() => {
+    prevDiscardTopRef.current = visibleState?.discardPile.at(-1) ?? null;
+  }, [visibleState]);
 
   if (!identity || !visibleState || !myId) return null;
   const visible = visibleState;
@@ -203,7 +248,9 @@ export function SpectatorView({ remote }: Props) {
       <section className="center-row">
         <div className="pile">
           <span className="pile-label">Deck ({visible.deckSize})</span>
-          <DeckStack size={visible.deckSize} />
+          <div ref={deckRef}>
+            <DeckStack size={visible.deckSize} />
+          </div>
         </div>
         <div className="pile">
           <span className="pile-label">Discard ({visible.discardPile.length})</span>
