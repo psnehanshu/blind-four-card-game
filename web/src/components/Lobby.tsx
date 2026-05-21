@@ -24,13 +24,17 @@ export function Lobby({ remote }: Props) {
   return (
     <div className="screen lobby">
       <h1>Blind Four</h1>
-      <p className="muted">Game code: {identity.gameId}</p>
+
+      <section className="game-code-display">
+        <span className="muted small-note">Game code</span>
+        <span className="game-code">{identity.gameId}</span>
+      </section>
 
       {isHost && (
         <section className="form-block">
           <label htmlFor="invite">Invite link</label>
           <input id="invite" readOnly value={inviteUrl} onFocus={(e) => e.currentTarget.select()} />
-          <p className="muted small-note">Share this URL — others open it to join.</p>
+          <p className="muted small-note">Share this URL — or have others enter the code above.</p>
         </section>
       )}
 
