@@ -12,6 +12,17 @@ export function FinalReveal({ remote }: Props) {
   useEffect(() => {
     playWin();
   }, []);
+
+  async function exitToSplash() {
+    if (document.fullscreenElement) {
+      try {
+        await document.exitFullscreen();
+      } catch {
+        /* ignore */
+      }
+    }
+    window.location.assign("/");
+  }
   const { visibleState, displayNames, winnerIds } = remote;
   if (!visibleState) return null;
   const winners = new Set(winnerIds);
@@ -74,6 +85,10 @@ export function FinalReveal({ remote }: Props) {
           );
         })}
       </section>
+
+      <button type="button" className="primary big" onClick={exitToSplash}>
+        Exit
+      </button>
     </div>
   );
 }

@@ -38,6 +38,13 @@ export function Splash({ onReady }: Props) {
     try {
       await startAudio();
       startBackgroundMusic();
+      // Fullscreen must be requested from the same user gesture; ignore
+      // rejection (Safari iOS doesn't support it on document elements).
+      try {
+        await document.documentElement.requestFullscreen?.();
+      } catch {
+        /* not supported / user denied — game still runs windowed */
+      }
       onReady();
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
