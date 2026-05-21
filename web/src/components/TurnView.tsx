@@ -20,6 +20,10 @@ interface PeekDisplay {
 }
 
 const DRAWN_CLOSEUP_SCALE = 2.6;
+// After entering showdown_eligible, give the player a window before auto-ending.
+// Longer when showdown is a real choice; shorter buffer otherwise so animations land.
+const SHOWDOWN_WINDOW_MS = 5000;
+const AUTO_END_BUFFER_MS = 1000;
 
 interface Props {
   remote: RemoteEngine;
@@ -54,6 +58,13 @@ export function TurnView({ remote }: Props) {
   const [hideDiscardTopForFlight, setHideDiscardTopForFlight] = useState(false);
   // Slots whose contents are visually hidden while a swap flight is in transit.
   const [hiddenSlots, setHiddenSlots] = useState<Set<string>>(new Set());
+  // Countdown displayed alongside the Call Showdown button (null = no window active).
+  const [endCountdown, setEndCountdown] = useState<number | null>(null);
+  const endTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const endIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // dispatch is recreated each render; ref it so the auto-end effect stays stable.
+  const dispatchRef = useRef(dispatch);
+  dispatchRef.current = dispatch;
 
   function setSlotRef(handPlayerId: string, cardIndex: number) {
     return (el: HTMLElement | null) => {
@@ -154,8 +165,16 @@ export function TurnView({ remote }: Props) {
     );
   }
 
-  function endTurn() {
-    send("END_TURN", undefined);
+  function clearAutoEnd() {
+    if (endTimeoutRef.current) {
+      clearTimeout(endTimeoutRef.current);
+      endTimeoutRef.current = null;
+    }
+    if (endIntervalRef.current) {
+      clearInterval(endIntervalRef.current);
+      endIntervalRef.current = null;
+    }
+    setEndCountdown(null);
   }
 
   useEffect(() => {
@@ -214,6 +233,7 @@ export function TurnView({ remote }: Props) {
   }, [peekResult, visible.players, displayNames, clearPeek]);
 
   function callShowdown() {
+    clearAutoEnd();
     send("CALL_SHOWDOWN", undefined);
     playShowdown();
   }
@@ -229,6 +249,36 @@ export function TurnView({ remote }: Props) {
   const inPower = validEvents.includes("USE_POWER");
   const canEnd = validEvents.includes("END_TURN");
   const canShowdown = validEvents.includes("CALL_SHOWDOWN");
+
+  // Auto-end the turn once we enter showdown_eligible. Waits 5s if showdown is a
+  // legal call (so the player can decide), else just buffers long enough for
+  // discard/power animations to land. Clicking Call Showdown cancels the timer.
+  const peekOpen = !!peekDisplay;
+  useEffect(() => {
+    if (!canEnd || inPower || peekOpen) {
+      clearAutoEnd();
+      return;
+    }
+    if (endTimeoutRef.current) return; // already armed
+
+    const windowMs = canShowdown ? SHOWDOWN_WINDOW_MS : AUTO_END_BUFFER_MS;
+    const deadline = Date.now() + windowMs;
+
+    if (canShowdown) {
+      setEndCountdown(Math.ceil(windowMs / 1000));
+      endIntervalRef.current = setInterval(() => {
+        const remaining = Math.max(0, deadline - Date.now());
+        setEndCountdown(Math.ceil(remaining / 1000));
+      }, 200);
+    }
+
+    endTimeoutRef.current = setTimeout(() => {
+      clearAutoEnd();
+      dispatchRef.current("END_TURN", undefined);
+    }, windowMs);
+
+    return clearAutoEnd;
+  }, [canEnd, canShowdown, inPower, peekOpen]);
 
   function shuffleNonceFor(handPlayerId: string): number | undefined {
     if (cue?.kind === "shuffle" && cue.targetPlayerId === handPlayerId) return cue.nonce;
@@ -428,18 +478,11 @@ export function TurnView({ remote }: Props) {
         )}
       </Dialog>
 
-      {(canEnd || canShowdown) && (
+      {canShowdown && endCountdown !== null && (
         <section className="end-actions">
-          {canShowdown && (
-            <button type="button" className="primary" onClick={callShowdown}>
-              Call showdown
-            </button>
-          )}
-          {canEnd && (
-            <button type="button" className="primary big" onClick={endTurn}>
-              End turn
-            </button>
-          )}
+          <button type="button" className="primary big" onClick={callShowdown}>
+            Call showdown ({endCountdown})
+          </button>
         </section>
       )}
 
