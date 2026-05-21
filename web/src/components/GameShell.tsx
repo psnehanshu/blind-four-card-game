@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { AnimatePresence, motion } from "motion/react";
 import type { RemoteEngine } from "../net/useRemoteEngine.js";
 import { InitialReveal } from "./InitialReveal.js";
 import { TurnView } from "./TurnView.js";
@@ -48,6 +49,66 @@ export function GameShell({ remote }: Props) {
   }
 
   const myTurn = visibleState.players[visibleState.currentTurn]?.id === identity.playerId;
-  if (myTurn) return <TurnView remote={remote} />;
-  return <SpectatorView remote={remote} />;
+  return (
+    <>
+      {myTurn ? <TurnView remote={remote} /> : <SpectatorView remote={remote} />}
+      <ShuffleNotice remote={remote} />
+    </>
+  );
+}
+
+const SHUFFLE_NOTICE_MS = 3500;
+
+function ShuffleNotice({ remote }: { remote: RemoteEngine }) {
+  const { cue, identity, visibleState, displayNames } = remote;
+  const myId = identity?.playerId;
+  const [message, setMessage] = useState<string | null>(null);
+  // Hold the dismiss timer in a ref so unrelated re-renders (cue clears,
+  // STATE pushes) don't cancel it via the effect's cleanup. Only a new
+  // shuffle cue should replace it.
+  const lastNonceRef = useRef<number | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!cue || cue.kind !== "shuffle") return;
+    if (cue.nonce === lastNonceRef.current) return;
+    if (!myId || cue.targetPlayerId !== myId) return;
+    lastNonceRef.current = cue.nonce;
+
+    if (timerRef.current) clearTimeout(timerRef.current);
+
+    const actorName = playerNameFor(
+      cue.actorId,
+      myId,
+      displayNames,
+      visibleState?.players.find((p) => p.id === cue.actorId)?.name,
+    );
+    setMessage(`${actorName} shuffled your hand`);
+    timerRef.current = setTimeout(() => {
+      setMessage(null);
+      timerRef.current = null;
+    }, SHUFFLE_NOTICE_MS);
+  }, [cue, myId, displayNames, visibleState]);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, []);
+
+  return (
+    <AnimatePresence>
+      {message && (
+        <motion.div
+          className="shuffle-notice"
+          initial={{ y: -20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          exit={{ y: -20, opacity: 0 }}
+          transition={{ type: "spring", stiffness: 260, damping: 22 }}
+        >
+          {message}
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
 }

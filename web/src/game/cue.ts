@@ -8,7 +8,7 @@ import type { EventPayloadMap, ProposedEventType } from "../../../engine/types.j
  * same player) still trigger fresh animations — components key off it.
  */
 export type AnimationCue =
-  | { kind: "shuffle"; nonce: number; targetPlayerId: string }
+  | { kind: "shuffle"; nonce: number; actorId: string; targetPlayerId: string }
   | {
       kind: "swap";
       nonce: number;
@@ -52,15 +52,15 @@ export function deriveCue<T extends ProposedEventType>(
     return null;
   }
   if (type === "DISCARD_DRAWN") return { kind: "discard", nonce, actorId };
-  if (type === "USE_POWER" && isObj(raw)) return derivePowerCue(raw, nonce);
+  if (type === "USE_POWER" && isObj(raw)) return derivePowerCue(raw, nonce, actorId);
   return null;
 }
 
-function derivePowerCue(p: Record<string, unknown>, nonce: number): AnimationCue {
+function derivePowerCue(p: Record<string, unknown>, nonce: number, actorId: string): AnimationCue {
   // Joker mimics another rank — treat joker-as-shuffle identically to a direct shuffle.
   const core: Record<string, unknown> = p.power === "joker" && isObj(p.action) ? p.action : p;
   if (core.power === "shuffle" && typeof core.targetPlayerId === "string") {
-    return { kind: "shuffle", nonce, targetPlayerId: core.targetPlayerId };
+    return { kind: "shuffle", nonce, actorId, targetPlayerId: core.targetPlayerId };
   }
   if (
     core.power === "swap" &&

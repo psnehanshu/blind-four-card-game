@@ -996,3 +996,20 @@ button.slot-btn:hover:not(:disabled) {
 .done {
   justify-content: center;
 }
+
+/* Floating toast shown to a player whose hand was just shuffled. */
+.shuffle-notice {
+  position: fixed;
+  top: calc(20px + env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 110;
+  background: rgba(61, 139, 255, 0.18);
+  border: 1px solid rgba(61, 139, 255, 0.55);
+  color: #d8e6ff;
+  padding: 10px 18px;
+  border-radius: 999px;
+  font-weight: 600;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+}

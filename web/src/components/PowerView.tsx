@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { BasePowerAction, PowerAction, Rank, VisibleGameState } from "../../../engine/types.js";
 import { HAND_SIZE } from "../../../engine/types.js";
 import type { RemoteEngine } from "../net/useRemoteEngine.js";
@@ -179,7 +179,18 @@ function ShuffleForm({
   onSubmit: (a: BasePowerAction & { power: "shuffle" }) => void;
 }) {
   const [targetPlayerId, setTargetPlayerId] = useState<string | null>(null);
+  // PlayerPicker may re-invoke onChange across renders (its auto-select effect
+  // keeps firing while value is null). Guard so we dispatch USE_POWER exactly once.
+  const submittedRef = useRef(false);
   const opponents = visible.players.filter((p) => p.id !== playerId);
+
+  function handleSelect(id: string) {
+    setTargetPlayerId(id);
+    if (submittedRef.current) return;
+    submittedRef.current = true;
+    onSubmit({ power: "shuffle", targetPlayerId: id });
+  }
+
   return (
     <div className="power-form">
       <p className="muted">Shuffle an opponent&rsquo;s unlocked card positions. Locked positions stay put.</p>
@@ -189,18 +200,8 @@ function ShuffleForm({
         displayNames={displayNames}
         meId={playerId}
         value={targetPlayerId}
-        onChange={setTargetPlayerId}
+        onChange={handleSelect}
       />
-      <button
-        type="button"
-        className="primary"
-        disabled={!targetPlayerId}
-        onClick={() => {
-          if (targetPlayerId) onSubmit({ power: "shuffle", targetPlayerId });
-        }}
-      >
-        Shuffle
-      </button>
     </div>
   );
 }
@@ -342,6 +343,12 @@ function PlayerPicker({
   value: string | null;
   onChange: (id: string) => void;
 }) {
+  // When there's only one possible target, skip the manual click.
+  const soloId = players.length === 1 ? players[0]?.id : undefined;
+  useEffect(() => {
+    if (soloId && value !== soloId) onChange(soloId);
+  }, [soloId, value, onChange]);
+
   return (
     <div className="player-picker">
       <span className="muted">{label}:</span>
