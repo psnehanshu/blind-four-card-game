@@ -827,6 +827,30 @@ button.slot-btn:hover:not(:disabled) {
   line-height: 1.4;
 }
 
+/* Always-on game code indicator pinned to the bottom of the viewport.
+   Faint enough to ignore during play but glanceable when someone needs the code. */
+.game-code-badge {
+  position: fixed;
+  bottom: calc(8px + env(safe-area-inset-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 50;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  color: var(--muted);
+  background: rgba(0, 0, 0, 0.35);
+  padding: 4px 10px;
+  border-radius: 999px;
+  pointer-events: none;
+  opacity: 0.6;
+}
+
+.game-code-badge strong {
+  color: var(--accent);
+  letter-spacing: 2px;
+  margin-left: 4px;
+}
+
 /* ───────── dealing intro ───────── */
 
 .screen.dealing {

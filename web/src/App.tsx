@@ -130,8 +130,12 @@ function ActiveSession({
     );
   }
 
-  if (!remote.visibleState) {
-    return <Lobby remote={remote} />;
-  }
-  return <GameShell remote={remote} />;
+  return (
+    <>
+      {!remote.visibleState ? <Lobby remote={remote} /> : <GameShell remote={remote} />}
+      <aside className="game-code-badge" aria-label={`Game code ${remote.identity.gameId}`}>
+        code <strong>{remote.identity.gameId}</strong>
+      </aside>
+    </>
+  );
 }
