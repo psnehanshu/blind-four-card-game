@@ -72,7 +72,9 @@ export function Splash({ onReady }: Props) {
 
   return (
     <div className="screen splash">
-      <h1>Blind Four</h1>
+      <h1 className="splash-title">
+        <img src="/logo.png" alt="Blind Four" className="splash-logo" />
+      </h1>
 
       {mode === "menu" && (
         <div className="splash-actions">

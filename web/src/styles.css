@@ -854,6 +854,20 @@ button.slot-btn.slot-actionable .card-stack {
   letter-spacing: -1px;
 }
 
+/* The logo art already includes the "Blind FOUR" wordmark, so the heading
+   collapses to just the image. Keep the <h1> for semantics. */
+.splash-title {
+  margin: 0;
+  line-height: 0;
+}
+
+.splash-logo {
+  width: min(280px, 64vw);
+  height: auto;
+  display: block;
+  filter: drop-shadow(0 8px 24px rgba(0, 0, 0, 0.45));
+}
+
 .splash-actions {
   display: flex;
   flex-direction: column;
