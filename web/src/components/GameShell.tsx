@@ -11,7 +11,7 @@ interface Props {
 }
 
 export function GameShell({ remote }: Props) {
-  const { identity, visibleState, validEvents } = remote;
+  const { identity, visibleState, validEvents, displayNames } = remote;
   const [dealingDone, setDealingDone] = useState(false);
 
   if (!identity || !visibleState) return null;
@@ -24,7 +24,7 @@ export function GameShell({ remote }: Props) {
     const handSize = visibleState.myHand?.length ?? 4;
     return (
       <Dealing
-        players={visibleState.players.map((p) => ({ id: p.id, name: p.name }))}
+        players={visibleState.players.map((p) => ({ id: p.id, name: displayNames[p.id] ?? p.name }))}
         handSize={handSize}
         onComplete={() => setDealingDone(true)}
       />

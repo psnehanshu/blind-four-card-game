@@ -21,7 +21,7 @@ const POWER_LABEL: Record<"10" | "J" | "Q" | "K", string> = {
 };
 
 export function PowerView({ remote }: Props) {
-  const { identity, visibleState, dispatch, lastError } = remote;
+  const { identity, visibleState, dispatch, lastError, displayNames } = remote;
   if (!identity || !visibleState) return null;
   const visible = visibleState;
   const playerId = identity.playerId;
@@ -79,10 +79,28 @@ export function PowerView({ remote }: Props) {
       <h3>
         Resolve power: {stage.rank} ({POWER_LABEL[stage.rank]})
       </h3>
-      {stage.rank === "10" && <PeekForm visible={visible} playerId={playerId} onSubmit={(a) => submit(a, stage.wrap)} />}
-      {stage.rank === "J" && <ShuffleForm visible={visible} playerId={playerId} onSubmit={(a) => submit(a, stage.wrap)} />}
-      {stage.rank === "Q" && <SwapForm visible={visible} onSubmit={(a) => submit(a, stage.wrap)} />}
-      {stage.rank === "K" && <LockForm visible={visible} onSubmit={(a) => submit(a, stage.wrap)} />}
+      {stage.rank === "10" && (
+        <PeekForm
+          visible={visible}
+          playerId={playerId}
+          displayNames={displayNames}
+          onSubmit={(a) => submit(a, stage.wrap)}
+        />
+      )}
+      {stage.rank === "J" && (
+        <ShuffleForm
+          visible={visible}
+          playerId={playerId}
+          displayNames={displayNames}
+          onSubmit={(a) => submit(a, stage.wrap)}
+        />
+      )}
+      {stage.rank === "Q" && (
+        <SwapForm visible={visible} displayNames={displayNames} onSubmit={(a) => submit(a, stage.wrap)} />
+      )}
+      {stage.rank === "K" && (
+        <LockForm visible={visible} displayNames={displayNames} onSubmit={(a) => submit(a, stage.wrap)} />
+      )}
       {lastError && <div className="error">{lastError}</div>}
     </section>
   );
@@ -93,10 +111,12 @@ export function PowerView({ remote }: Props) {
 function PeekForm({
   visible,
   playerId,
+  displayNames,
   onSubmit,
 }: {
   visible: VisibleGameState;
   playerId: string;
+  displayNames: Record<string, string>;
   onSubmit: (a: BasePowerAction & { power: "peek" }) => void;
 }) {
   const [mode, setMode] = useState<"choose" | "opponent">("choose");
@@ -122,7 +142,13 @@ function PeekForm({
   return (
     <div className="power-form">
       <p className="muted">Choose an opponent, then tap a card to peek.</p>
-      <PlayerPicker label="Opponent" players={opponents} value={opponentId} onChange={setOpponentId} />
+      <PlayerPicker
+        label="Opponent"
+        players={opponents}
+        displayNames={displayNames}
+        value={opponentId}
+        onChange={setOpponentId}
+      />
       {opponentId && (
         <CardSlotPicker
           visible={visible}
@@ -142,10 +168,12 @@ function PeekForm({
 function ShuffleForm({
   visible,
   playerId,
+  displayNames,
   onSubmit,
 }: {
   visible: VisibleGameState;
   playerId: string;
+  displayNames: Record<string, string>;
   onSubmit: (a: BasePowerAction & { power: "shuffle" }) => void;
 }) {
   const [targetPlayerId, setTargetPlayerId] = useState<string | null>(null);
@@ -153,7 +181,13 @@ function ShuffleForm({
   return (
     <div className="power-form">
       <p className="muted">Shuffle an opponent&rsquo;s unlocked card positions. Locked positions stay put.</p>
-      <PlayerPicker label="Target" players={opponents} value={targetPlayerId} onChange={setTargetPlayerId} />
+      <PlayerPicker
+        label="Target"
+        players={opponents}
+        displayNames={displayNames}
+        value={targetPlayerId}
+        onChange={setTargetPlayerId}
+      />
       <button
         type="button"
         className="primary"
@@ -172,9 +206,11 @@ function ShuffleForm({
 
 function SwapForm({
   visible,
+  displayNames,
   onSubmit,
 }: {
   visible: VisibleGameState;
+  displayNames: Record<string, string>;
   onSubmit: (a: BasePowerAction & { power: "swap" }) => void;
 }) {
   const [a, setA] = useState<{ playerId: string | null; cardIndex: number | null }>({ playerId: null, cardIndex: null });
@@ -198,8 +234,8 @@ function SwapForm({
     <div className="power-form">
       <p className="muted">Swap one card between two different players. Locked cards cannot swap.</p>
       <div className="swap-row">
-        <SwapSide label="Player A" visible={visible} value={a} onChange={setA} />
-        <SwapSide label="Player B" visible={visible} value={b} onChange={setB} />
+        <SwapSide label="Player A" visible={visible} displayNames={displayNames} value={a} onChange={setA} />
+        <SwapSide label="Player B" visible={visible} displayNames={displayNames} value={b} onChange={setB} />
       </div>
       {samePlayer && <div className="error">Swap requires two different players.</div>}
       <button type="button" className="primary" disabled={!ready} onClick={submit}>
@@ -212,11 +248,13 @@ function SwapForm({
 function SwapSide({
   label,
   visible,
+  displayNames,
   value,
   onChange,
 }: {
   label: string;
   visible: VisibleGameState;
+  displayNames: Record<string, string>;
   value: { playerId: string | null; cardIndex: number | null };
   onChange: (v: { playerId: string | null; cardIndex: number | null }) => void;
 }) {
@@ -225,6 +263,7 @@ function SwapSide({
       <PlayerPicker
         label={label}
         players={visible.players}
+        displayNames={displayNames}
         value={value.playerId}
         onChange={(playerId) => onChange({ playerId, cardIndex: null })}
       />
@@ -245,16 +284,24 @@ function SwapSide({
 
 function LockForm({
   visible,
+  displayNames,
   onSubmit,
 }: {
   visible: VisibleGameState;
+  displayNames: Record<string, string>;
   onSubmit: (a: BasePowerAction & { power: "lock" }) => void;
 }) {
   const [targetPlayerId, setTargetPlayerId] = useState<string | null>(null);
   return (
     <div className="power-form">
       <p className="muted">Lock a card. Locked cards cannot be replaced or swapped.</p>
-      <PlayerPicker label="Target" players={visible.players} value={targetPlayerId} onChange={setTargetPlayerId} />
+      <PlayerPicker
+        label="Target"
+        players={visible.players}
+        displayNames={displayNames}
+        value={targetPlayerId}
+        onChange={setTargetPlayerId}
+      />
       {targetPlayerId && (
         <CardSlotPicker
           visible={visible}
@@ -272,11 +319,13 @@ function LockForm({
 function PlayerPicker({
   label,
   players,
+  displayNames,
   value,
   onChange,
 }: {
   label: string;
   players: VisibleGameState["players"];
+  displayNames: Record<string, string>;
   value: string | null;
   onChange: (id: string) => void;
 }) {
@@ -286,7 +335,7 @@ function PlayerPicker({
       <div className="player-picker-row">
         {players.map((p) => (
           <button key={p.id} type="button" className={value === p.id ? "primary" : "ghost"} onClick={() => onChange(p.id)}>
-            {p.name}
+            {displayNames[p.id] ?? p.name}
           </button>
         ))}
       </div>
