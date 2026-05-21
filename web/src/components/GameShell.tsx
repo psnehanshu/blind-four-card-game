@@ -63,6 +63,7 @@ export function GameShell({ remote }: Props) {
   return (
     <>
       {myTurn ? <TurnView remote={remote} /> : <SpectatorView remote={remote} />}
+      <div className={`my-turn-outline${myTurn ? " is-active" : ""}`} aria-hidden="true" />
       <ShuffleNotice remote={remote} />
     </>
   );

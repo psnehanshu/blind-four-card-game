@@ -35,6 +35,13 @@ body,
   color: var(--fg);
 }
 
+html {
+  /* Reserve scrollbar space at all times so content (and the my-turn outline)
+     don't shift horizontally when the scrollbar appears/disappears across
+     content height changes (TurnView ↔ SpectatorView swap). */
+  scrollbar-gutter: stable;
+}
+
 body {
   /* No text selection or iOS callout menus anywhere in the game — cards and
      buttons aren't documents. Inputs re-enable selection below. */
@@ -495,16 +502,22 @@ button.slot-btn.slot-actionable {
   animation: pile-pulse 1.4s ease-in-out infinite;
 }
 
-/* Glowing outline around the viewport while it's your turn. */
-.screen.turn.is-my-turn::before {
-  content: "";
+/* Glowing outline around the viewport. Always mounted (so it never causes a
+   reflow when toggled) and shown via visibility — the element keeps its
+   fixed-position box at all times. */
+.my-turn-outline {
   position: fixed;
   inset: 0;
   pointer-events: none;
   border: 3px solid var(--accent);
   border-radius: 18px;
-  animation: my-turn-outline-pulse 1.8s ease-in-out infinite;
   z-index: 100;
+  visibility: hidden;
+  animation: my-turn-outline-pulse 1.8s ease-in-out infinite;
+}
+
+.my-turn-outline.is-active {
+  visibility: visible;
 }
 
 @keyframes my-turn-outline-pulse {

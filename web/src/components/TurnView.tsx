@@ -287,7 +287,7 @@ export function TurnView({ remote }: Props) {
   const renderedDiscardPile = hideDiscardTopForFlight ? visible.discardPile.slice(0, -1) : visible.discardPile;
 
   return (
-    <div className="screen turn is-my-turn">
+    <div className="screen turn">
       <header className="turn-header">
         <h2>Your turn</h2>
       </header>
