@@ -86,7 +86,6 @@ export function TurnView({ remote }: Props) {
   }
 
   const me = visible.players.find((p) => p.id === playerId);
-  const meName = playerNameFor(playerId, playerId, displayNames, me?.name);
   const opponents = visible.players.filter((p) => p.id !== playerId);
 
   function send<T extends ProposedEventType>(type: T, payload: EventPayloadMap[T]) {
@@ -290,7 +289,7 @@ export function TurnView({ remote }: Props) {
   return (
     <div className="screen turn is-my-turn">
       <header className="turn-header">
-        <h2>{meName}&rsquo;s turn</h2>
+        <h2>Your turn</h2>
       </header>
 
       <AnimatePresence>
@@ -441,7 +440,7 @@ export function TurnView({ remote }: Props) {
                   key={i}
                   ref={setSlotRef(playerId, i)}
                   type="button"
-                  className={hidden ? "slot-btn slot-hidden" : "slot-btn"}
+                  className={hidden ? "slot-btn slot-actionable slot-hidden" : "slot-btn slot-actionable"}
                   onClick={() => replaceSlot(i)}
                 >
                   {inner}
