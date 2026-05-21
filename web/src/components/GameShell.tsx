@@ -40,10 +40,21 @@ export function GameShell({ remote }: Props) {
     if (validEvents.includes("ACKNOWLEDGE_REVEAL")) {
       return <InitialReveal remote={remote} />;
     }
+    const pending = visibleState.players.filter((p) => !p.acknowledgedReveal);
     return (
       <div className="screen reveal">
         <h2>Waiting for the other players to acknowledge…</h2>
         <p className="muted">Play starts as soon as everyone has memorized their hand.</p>
+        {pending.length > 0 && (
+          <section className="form-block">
+            <h3>Still memorizing their hand</h3>
+            <ul className="player-list">
+              {pending.map((p) => (
+                <li key={p.id}>{playerNameFor(p.id, identity.playerId, displayNames, p.name)}</li>
+              ))}
+            </ul>
+          </section>
+        )}
       </div>
     );
   }

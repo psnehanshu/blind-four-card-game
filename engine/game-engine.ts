@@ -178,6 +178,7 @@ export class GameEngine {
         lockedCards,
         handSize: p.hand.length,
         isCurrentTurn: this.game.players[this.game.currentTurn]?.id === p.id,
+        acknowledgedReveal: this.playersAcknowledgedReveal.has(p.id),
       });
     }
 

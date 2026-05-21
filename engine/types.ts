@@ -173,6 +173,9 @@ export interface VisiblePlayerState {
   handSize: number;
   /** Whether this player is the current turn holder. */
   isCurrentTurn: boolean;
+  /** Whether this player has acknowledged the initial reveal. Only meaningful
+   *  while state === "initial_reveal"; always true once play begins. */
+  acknowledgedReveal: boolean;
 }
 
 /** Game state filtered for one player (respects visibility rules). */
