@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import type { RemoteEngine } from "../net/useRemoteEngine.js";
 import { CardView } from "./CardView.js";
 import { tiltForSlot } from "../util/rand.js";
+import { playerNameFor } from "../util/playerName.js";
 import { playWin } from "../audio/sound.js";
 
 interface Props {
@@ -23,12 +24,13 @@ export function FinalReveal({ remote }: Props) {
     }
     window.location.assign("/");
   }
-  const { visibleState, displayNames, winnerIds } = remote;
+  const { identity, visibleState, displayNames, winnerIds } = remote;
   if (!visibleState) return null;
+  const meId = identity?.playerId;
   const winners = new Set(winnerIds);
   const callerId = visibleState.callerId;
   const callerName = callerId
-    ? (displayNames[callerId] ?? visibleState.players.find((p) => p.id === callerId)?.name)
+    ? playerNameFor(callerId, meId, displayNames, visibleState.players.find((p) => p.id === callerId)?.name)
     : undefined;
 
   const markersByPlayer = new Map<string, Map<number, import("../../../engine/types.js").Card>>();
@@ -41,7 +43,7 @@ export function FinalReveal({ remote }: Props) {
   const allHands = visibleState.allHands ?? [];
   const rows = allHands.map((entry) => {
     const player = visibleState.players.find((p) => p.id === entry.playerId);
-    const name = displayNames[entry.playerId] ?? player?.name ?? entry.playerId;
+    const name = playerNameFor(entry.playerId, meId, displayNames, player?.name);
     const score = entry.hand.reduce((sum, pc) => sum + pc.card.value, 0);
     const markers = markersByPlayer.get(entry.playerId) ?? new Map();
     return { playerId: entry.playerId, name, hand: entry.hand, score, markers };

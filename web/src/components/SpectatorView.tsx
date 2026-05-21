@@ -7,6 +7,7 @@ import { Hand } from "./Hand.js";
 import { ShuffleSlot } from "./ShuffleSlot.js";
 import { FlightLayer, type Flight } from "./FlightLayer.js";
 import { tiltForSlot } from "../util/rand.js";
+import { playerNameFor } from "../util/playerName.js";
 
 interface Props {
   remote: RemoteEngine;
@@ -72,7 +73,7 @@ export function SpectatorView({ remote }: Props) {
   const visible = visibleState;
   const myId = identity.playerId;
   const currentPlayer = visible.players[visible.currentTurn];
-  const currentName = currentPlayer ? (displayNames[currentPlayer.id] ?? currentPlayer.name) : "—";
+  const currentName = currentPlayer ? playerNameFor(currentPlayer.id, myId, displayNames, currentPlayer.name) : "—";
 
   function setSlotRef(handPlayerId: string, cardIndex: number) {
     return (el: HTMLElement | null) => {
@@ -108,7 +109,7 @@ export function SpectatorView({ remote }: Props) {
             transition={{ type: "spring", stiffness: 260, damping: 22 }}
           >
             <strong>
-              Showdown called by {visible.callerId ? (displayNames[visible.callerId] ?? visible.callerId) : "?"}.
+              Showdown called by {visible.callerId ? playerNameFor(visible.callerId, myId, displayNames) : "?"}.
             </strong>
           </motion.div>
         )}
@@ -124,7 +125,7 @@ export function SpectatorView({ remote }: Props) {
             return (
               <div key={op.id} className="opponent">
                 <span className="opponent-name">
-                  {displayNames[op.id] ?? op.name}
+                  {playerNameFor(op.id, myId, displayNames, op.name)}
                   {op.id === currentPlayer?.id && <span className="badge caller">TURN</span>}
                 </span>
                 <Hand className="hand small" shakeNonce={shuffleNonceFor(op.id)}>

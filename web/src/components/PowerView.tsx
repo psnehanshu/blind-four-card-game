@@ -4,6 +4,7 @@ import { HAND_SIZE } from "../../../engine/types.js";
 import type { RemoteEngine } from "../net/useRemoteEngine.js";
 import { CardView } from "./CardView.js";
 import { tiltForSlot } from "../util/rand.js";
+import { playerNameFor } from "../util/playerName.js";
 
 interface Props {
   remote: RemoteEngine;
@@ -96,10 +97,10 @@ export function PowerView({ remote }: Props) {
         />
       )}
       {stage.rank === "Q" && (
-        <SwapForm visible={visible} displayNames={displayNames} onSubmit={(a) => submit(a, stage.wrap)} />
+        <SwapForm visible={visible} displayNames={displayNames} meId={playerId} onSubmit={(a) => submit(a, stage.wrap)} />
       )}
       {stage.rank === "K" && (
-        <LockForm visible={visible} displayNames={displayNames} onSubmit={(a) => submit(a, stage.wrap)} />
+        <LockForm visible={visible} displayNames={displayNames} meId={playerId} onSubmit={(a) => submit(a, stage.wrap)} />
       )}
       {lastError && <div className="error">{lastError}</div>}
     </section>
@@ -146,6 +147,7 @@ function PeekForm({
         label="Opponent"
         players={opponents}
         displayNames={displayNames}
+        meId={playerId}
         value={opponentId}
         onChange={setOpponentId}
       />
@@ -185,6 +187,7 @@ function ShuffleForm({
         label="Target"
         players={opponents}
         displayNames={displayNames}
+        meId={playerId}
         value={targetPlayerId}
         onChange={setTargetPlayerId}
       />
@@ -207,10 +210,12 @@ function ShuffleForm({
 function SwapForm({
   visible,
   displayNames,
+  meId,
   onSubmit,
 }: {
   visible: VisibleGameState;
   displayNames: Record<string, string>;
+  meId: string;
   onSubmit: (a: BasePowerAction & { power: "swap" }) => void;
 }) {
   const [a, setA] = useState<{ playerId: string | null; cardIndex: number | null }>({ playerId: null, cardIndex: null });
@@ -234,8 +239,8 @@ function SwapForm({
     <div className="power-form">
       <p className="muted">Swap one card between two different players. Locked cards cannot swap.</p>
       <div className="swap-row">
-        <SwapSide label="Player A" visible={visible} displayNames={displayNames} value={a} onChange={setA} />
-        <SwapSide label="Player B" visible={visible} displayNames={displayNames} value={b} onChange={setB} />
+        <SwapSide label="Player A" visible={visible} displayNames={displayNames} meId={meId} value={a} onChange={setA} />
+        <SwapSide label="Player B" visible={visible} displayNames={displayNames} meId={meId} value={b} onChange={setB} />
       </div>
       {samePlayer && <div className="error">Swap requires two different players.</div>}
       <button type="button" className="primary" disabled={!ready} onClick={submit}>
@@ -249,12 +254,14 @@ function SwapSide({
   label,
   visible,
   displayNames,
+  meId,
   value,
   onChange,
 }: {
   label: string;
   visible: VisibleGameState;
   displayNames: Record<string, string>;
+  meId: string;
   value: { playerId: string | null; cardIndex: number | null };
   onChange: (v: { playerId: string | null; cardIndex: number | null }) => void;
 }) {
@@ -264,6 +271,7 @@ function SwapSide({
         label={label}
         players={visible.players}
         displayNames={displayNames}
+        meId={meId}
         value={value.playerId}
         onChange={(playerId) => onChange({ playerId, cardIndex: null })}
       />
@@ -285,10 +293,12 @@ function SwapSide({
 function LockForm({
   visible,
   displayNames,
+  meId,
   onSubmit,
 }: {
   visible: VisibleGameState;
   displayNames: Record<string, string>;
+  meId: string;
   onSubmit: (a: BasePowerAction & { power: "lock" }) => void;
 }) {
   const [targetPlayerId, setTargetPlayerId] = useState<string | null>(null);
@@ -299,6 +309,7 @@ function LockForm({
         label="Target"
         players={visible.players}
         displayNames={displayNames}
+        meId={meId}
         value={targetPlayerId}
         onChange={setTargetPlayerId}
       />
@@ -320,12 +331,14 @@ function PlayerPicker({
   label,
   players,
   displayNames,
+  meId,
   value,
   onChange,
 }: {
   label: string;
   players: VisibleGameState["players"];
   displayNames: Record<string, string>;
+  meId: string;
   value: string | null;
   onChange: (id: string) => void;
 }) {
@@ -335,7 +348,7 @@ function PlayerPicker({
       <div className="player-picker-row">
         {players.map((p) => (
           <button key={p.id} type="button" className={value === p.id ? "primary" : "ghost"} onClick={() => onChange(p.id)}>
-            {displayNames[p.id] ?? p.name}
+            {playerNameFor(p.id, meId, displayNames, p.name)}
           </button>
         ))}
       </div>

@@ -11,6 +11,7 @@ import { FlightLayer, type Flight } from "./FlightLayer.js";
 import { Hand } from "./Hand.js";
 import { ShuffleSlot } from "./ShuffleSlot.js";
 import { tiltForSlot } from "../util/rand.js";
+import { playerNameFor } from "../util/playerName.js";
 import { playPeek, playShowdown } from "../audio/sound.js";
 
 interface PeekDisplay {
@@ -74,7 +75,7 @@ export function TurnView({ remote }: Props) {
   }
 
   const me = visible.players.find((p) => p.id === playerId);
-  const meName = displayNames[playerId] ?? me?.name ?? playerId;
+  const meName = playerNameFor(playerId, playerId, displayNames, me?.name);
   const opponents = visible.players.filter((p) => p.id !== playerId);
 
   function send<T extends ProposedEventType>(type: T, payload: EventPayloadMap[T]) {
@@ -206,7 +207,7 @@ export function TurnView({ remote }: Props) {
   useEffect(() => {
     if (!peekResult) return;
     const target = visible.players.find((p) => p.id === peekResult.playerId);
-    const targetName = displayNames[peekResult.playerId] ?? target?.name ?? peekResult.playerId;
+    const targetName = playerNameFor(peekResult.playerId, playerId, displayNames, target?.name);
     setPeekDisplay({ playerName: targetName, cards: peekResult.cards });
     playPeek();
     clearPeek();
@@ -253,9 +254,14 @@ export function TurnView({ remote }: Props) {
           >
             <strong>
               Showdown called by{" "}
-              {displayNames[visible.callerId ?? ""] ??
-                visible.players.find((p) => p.id === visible.callerId)?.name ??
-                visible.callerId}
+              {visible.callerId
+                ? playerNameFor(
+                    visible.callerId,
+                    playerId,
+                    displayNames,
+                    visible.players.find((p) => p.id === visible.callerId)?.name,
+                  )
+                : "?"}
               .
             </strong>
             <span> This is your final turn.</span>
@@ -272,7 +278,7 @@ export function TurnView({ remote }: Props) {
             );
             return (
               <div key={op.id} className="opponent">
-                <span className="opponent-name">{displayNames[op.id] ?? op.name}</span>
+                <span className="opponent-name">{playerNameFor(op.id, playerId, displayNames, op.name)}</span>
                 <Hand className="hand small" shakeNonce={shuffleNonceFor(op.id)}>
                   {Array.from({ length: op.handSize }).map((_, i) => {
                     const marker = markers.get(i);

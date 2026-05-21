@@ -5,6 +5,7 @@ import { TurnView } from "./TurnView.js";
 import { FinalReveal } from "./FinalReveal.js";
 import { Dealing } from "./Dealing.js";
 import { SpectatorView } from "./SpectatorView.js";
+import { playerNameFor } from "../util/playerName.js";
 
 interface Props {
   remote: RemoteEngine;
@@ -24,7 +25,10 @@ export function GameShell({ remote }: Props) {
     const handSize = visibleState.myHand?.length ?? 4;
     return (
       <Dealing
-        players={visibleState.players.map((p) => ({ id: p.id, name: displayNames[p.id] ?? p.name }))}
+        players={visibleState.players.map((p) => ({
+          id: p.id,
+          name: playerNameFor(p.id, identity.playerId, displayNames, p.name),
+        }))}
         handSize={handSize}
         onComplete={() => setDealingDone(true)}
       />

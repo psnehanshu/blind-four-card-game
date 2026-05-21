@@ -86,7 +86,14 @@ export function Splash({ onReady }: Props) {
       )}
 
       {mode === "joining" && (
-        <section className="form-block">
+        <form
+          className="form-block"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const code = joinCode.trim();
+            if (!disabled && code.length > 0) activate(code);
+          }}
+        >
           <label htmlFor="joincode">Game code</label>
           <input
             id="joincode"
@@ -99,12 +106,7 @@ export function Splash({ onReady }: Props) {
             spellCheck={false}
           />
           <div className="splash-actions row">
-            <button
-              type="button"
-              className="primary big"
-              disabled={disabled || joinCode.trim().length === 0}
-              onClick={() => activate(joinCode.trim())}
-            >
+            <button type="submit" className="primary big" disabled={disabled || joinCode.trim().length === 0}>
               Join
             </button>
             <button
@@ -120,7 +122,7 @@ export function Splash({ onReady }: Props) {
               Back
             </button>
           </div>
-        </section>
+        </form>
       )}
 
       {hint && <p className="muted small-note">{hint}</p>}

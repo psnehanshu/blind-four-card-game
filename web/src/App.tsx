@@ -58,17 +58,23 @@ function NamePrompt({ joinTarget, onSubmit }: { joinTarget: string | null; onSub
   const [name, setName] = useState("");
   const trimmed = name.trim();
   return (
-    <div className="screen lobby">
+    <form
+      className="screen lobby"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (trimmed.length > 0) onSubmit(trimmed);
+      }}
+    >
       <h1>Blind Four</h1>
       <p className="muted">{joinTarget ? `Joining game ${joinTarget}` : "Create a new game"}</p>
       <section className="form-block">
         <label htmlFor="name">Your name</label>
         <input id="name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Alice" autoFocus />
       </section>
-      <button type="button" className="primary big" disabled={trimmed.length === 0} onClick={() => onSubmit(trimmed)}>
+      <button type="submit" className="primary big" disabled={trimmed.length === 0}>
         {joinTarget ? "Join game" : "Create game"}
       </button>
-    </div>
+    </form>
   );
 }
 

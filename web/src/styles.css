@@ -727,6 +727,7 @@ button.slot-btn:hover:not(:disabled) {
   gap: 14px;
   width: 100%;
   max-width: 280px;
+  align-self: center;
 }
 
 .splash-actions.row {
