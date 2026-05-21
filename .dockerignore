@@ -1,0 +1,12 @@
+node_modules
+**/node_modules
+web/dist
+web/.vite
+server/data
+dist
+.git
+.DS_Store
+.claude
+*.log
+.env
+.env.*
