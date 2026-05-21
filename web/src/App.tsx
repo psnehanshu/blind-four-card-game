@@ -134,7 +134,7 @@ function ActiveSession({
     <>
       {!remote.visibleState ? <Lobby remote={remote} /> : <GameShell remote={remote} />}
       <aside className="game-code-badge" aria-label={`Game code ${remote.identity.gameId}`}>
-        code <strong>{remote.identity.gameId}</strong>
+        game code <strong>{remote.identity.gameId}</strong>
       </aside>
     </>
   );

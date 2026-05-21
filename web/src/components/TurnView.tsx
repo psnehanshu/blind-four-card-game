@@ -45,8 +45,8 @@ export function TurnView({ remote }: Props) {
   const [peekDisplay, setPeekDisplay] = useState<PeekDisplay | null>(null);
 
   // ───── Flight refs + state ─────
-  const deckRef = useRef<HTMLDivElement | null>(null);
-  const discardRef = useRef<HTMLDivElement | null>(null);
+  const deckRef = useRef<HTMLButtonElement | null>(null);
+  const discardRef = useRef<HTMLButtonElement | null>(null);
   const drawnRef = useRef<HTMLDivElement | null>(null);
   // Keyed by `${playerId}-${cardIndex}` — covers every hand slot on screen
   // (mine and opponents'), so the swap power can fly cards between any two.
@@ -361,31 +361,29 @@ export function TurnView({ remote }: Props) {
       <section className="center-row">
         <div className={`pile${canDraw && visible.deckSize > 0 ? " is-active" : ""}`}>
           <span className="pile-label">Deck ({visible.deckSize})</span>
-          <div ref={deckRef}>
-            <DeckStack size={visible.deckSize} />
-          </div>
           <button
+            ref={deckRef}
             type="button"
-            className="primary"
+            className="slot-btn"
             disabled={!canDraw || visible.deckSize === 0}
             onClick={() => drawFrom("deck")}
+            aria-label="Draw from deck"
           >
-            Draw from deck
+            <DeckStack size={visible.deckSize} />
           </button>
         </div>
 
         <div className={`pile${canDraw && visible.discardPile.length > 0 ? " is-active" : ""}`}>
           <span className="pile-label">Discard ({visible.discardPile.length})</span>
-          <div ref={discardRef}>
-            <DiscardStack cards={renderedDiscardPile} />
-          </div>
           <button
+            ref={discardRef}
             type="button"
-            className="primary"
+            className="slot-btn"
             disabled={!canDraw || visible.discardPile.length === 0}
             onClick={() => drawFrom("discard")}
+            aria-label="Draw from discard"
           >
-            Draw from discard
+            <DiscardStack cards={renderedDiscardPile} />
           </button>
         </div>
       </section>
@@ -400,20 +398,22 @@ export function TurnView({ remote }: Props) {
             exit={{ opacity: 0, y: -40, scale: 0.8 }}
             transition={{ type: "spring", stiffness: 220, damping: 22 }}
           >
-            <span className="pile-label">You drew</span>
             <div ref={drawnRef} className="drawn-closeup-card">
               <div className="drawn-closeup-scale" style={{ transform: `scale(${DRAWN_CLOSEUP_SCALE})` }}>
                 <CardView card={drawn} size="md" />
               </div>
+              <div className="drawn-closeup-banner">
+                <span className="drawn-closeup-caption">You drew</span>
+                {canDiscardDrawn && (
+                  <button type="button" className="primary small" onClick={discardDrawn}>
+                    Discard this card
+                  </button>
+                )}
+                {canReplace && !canDiscardDrawn && (
+                  <p className="drawn-closeup-note">Drawn from discard — must be placed into your hand.</p>
+                )}
+              </div>
             </div>
-            {canDiscardDrawn && (
-              <button type="button" className="primary" onClick={discardDrawn}>
-                Discard this card
-              </button>
-            )}
-            {canReplace && !canDiscardDrawn && (
-              <p className="muted small-note">Drawn from discard — must be placed into your hand.</p>
-            )}
           </motion.div>
         )}
       </AnimatePresence>

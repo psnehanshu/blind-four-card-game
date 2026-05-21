@@ -101,9 +101,9 @@ function ShuffleNotice({ remote }: { remote: RemoteEngine }) {
       {message && (
         <motion.div
           className="shuffle-notice"
-          initial={{ y: -20, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          exit={{ y: -20, opacity: 0 }}
+          initial={{ x: "-50%", y: 20, opacity: 0 }}
+          animate={{ x: "-50%", y: 0, opacity: 1 }}
+          exit={{ x: "-50%", y: 20, opacity: 0 }}
           transition={{ type: "spring", stiffness: 260, damping: 22 }}
         >
           {message}
