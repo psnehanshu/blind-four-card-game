@@ -11,6 +11,24 @@ function gameIdFromHash(): string | null {
   return m && m[1] ? m[1] : null;
 }
 
+const DISPLAY_NAME_KEY = "blind-four:displayName";
+
+function loadStoredName(): string {
+  try {
+    return window.localStorage.getItem(DISPLAY_NAME_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function storeName(name: string): void {
+  try {
+    window.localStorage.setItem(DISPLAY_NAME_KEY, name);
+  } catch {
+    // localStorage may be disabled; auto-fill simply won't carry across sessions.
+  }
+}
+
 type Phase = { kind: "splash" } | { kind: "name" } | { kind: "active" };
 
 export function App() {
@@ -45,6 +63,7 @@ export function App() {
       <NamePrompt
         joinTarget={joinTarget}
         onSubmit={(name) => {
+          storeName(name);
           setPendingName(name);
           setPhase({ kind: "active" });
         }}
@@ -55,7 +74,7 @@ export function App() {
 }
 
 function NamePrompt({ joinTarget, onSubmit }: { joinTarget: string | null; onSubmit: (name: string) => void }) {
-  const [name, setName] = useState("");
+  const [name, setName] = useState(loadStoredName);
   const trimmed = name.trim();
   return (
     <form
