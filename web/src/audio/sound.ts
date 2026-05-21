@@ -26,6 +26,7 @@ interface Voices {
   pad: Tone.PolySynth;
   padReverb: Tone.Reverb;
   padGain: Tone.Gain;
+  yourTurn: Tone.Player;
 }
 
 let voices: Voices | null = null;
@@ -139,6 +140,9 @@ export async function startAudio(): Promise<void> {
     volume: -22,
   }).connect(padReverb);
 
+  // ── sampled "your turn" cue (bypasses reverb so the spoken cue stays crisp)
+  const yourTurn = new Tone.Player({ url: "/your-turn.mp3", volume: -4 }).connect(master);
+
   voices = {
     master,
     reverb,
@@ -153,7 +157,11 @@ export async function startAudio(): Promise<void> {
     pad,
     padReverb,
     padGain,
+    yourTurn,
   };
+  // Wait for sampled buffers (yourTurn) to finish loading before reporting ready,
+  // so the first turn-start fires audibly instead of being silently dropped.
+  await Tone.loaded();
   started = true;
 }
 
@@ -228,6 +236,12 @@ export function playWin(): void {
 export function playButton(): void {
   if (!voices) return;
   voices.tone.triggerAttackRelease("C5", "32n", nextTime("tone"), 0.4);
+}
+
+export function playYourTurn(): void {
+  if (!voices || !voices.yourTurn.loaded) return;
+  if (voices.yourTurn.state === "started") voices.yourTurn.stop();
+  voices.yourTurn.start();
 }
 
 // ──────────────────── Background music ────────────────────

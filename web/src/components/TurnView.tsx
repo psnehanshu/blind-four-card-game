@@ -12,7 +12,7 @@ import { Hand } from "./Hand.js";
 import { ShuffleSlot } from "./ShuffleSlot.js";
 import { tiltForSlot } from "../util/rand.js";
 import { playerNameFor } from "../util/playerName.js";
-import { playPeek, playShowdown } from "../audio/sound.js";
+import { playPeek, playShowdown, playYourTurn } from "../audio/sound.js";
 
 interface PeekDisplay {
   playerName: string;
@@ -65,6 +65,12 @@ export function TurnView({ remote }: Props) {
   // dispatch is recreated each render; ref it so the auto-end effect stays stable.
   const dispatchRef = useRef(dispatch);
   dispatchRef.current = dispatch;
+
+  // TurnView only mounts when control passes to this client, so a mount-only
+  // effect is the right hook for the "your turn" cue.
+  useEffect(() => {
+    playYourTurn();
+  }, []);
 
   function setSlotRef(handPlayerId: string, cardIndex: number) {
     return (el: HTMLElement | null) => {
