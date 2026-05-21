@@ -8,9 +8,7 @@ let socket: Socket | null = null;
 
 function getSocket(): Socket {
   if (!socket) {
-    socket = URL
-      ? io(URL, { transports: ["websocket"] })
-      : io({ path: SOCKET_PATH, transports: ["websocket"] });
+    socket = URL ? io(URL, { transports: ["websocket"] }) : io({ path: SOCKET_PATH, transports: ["websocket"] });
   }
   return socket;
 }

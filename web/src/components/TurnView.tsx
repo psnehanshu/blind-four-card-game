@@ -18,6 +18,8 @@ interface PeekDisplay {
   cards: PeekResult["cards"];
 }
 
+const DRAWN_CLOSEUP_SCALE = 2;
+
 interface Props {
   remote: RemoteEngine;
 }
@@ -103,6 +105,8 @@ export function TurnView({ remote }: Props) {
             to,
             card: source === "discard" ? sourceCardBefore : null,
             revealAt: source === "deck" ? justDrawn : null,
+            scaleTo: DRAWN_CLOSEUP_SCALE,
+            arcLift: 120,
           },
           () => setDrawnHiddenForFlight(false),
         );
@@ -122,9 +126,12 @@ export function TurnView({ remote }: Props) {
 
     setHideDiscardTopForFlight(true);
 
-    pushFlight({ from: drawnRect, to: handRect, card: drawnBefore, revealAt: null }, () => {
-      /* no underlying-element update needed — hand slot was already hidden. */
-    });
+    pushFlight(
+      { from: drawnRect, to: handRect, card: drawnBefore, revealAt: null, scaleFrom: DRAWN_CLOSEUP_SCALE },
+      () => {
+        /* no underlying-element update needed — hand slot was already hidden. */
+      },
+    );
 
     // Hand slot → discard. We don't know which card was at handIndex (it was hidden
     // before this turn), so the flight is face-down; the new discard top will reveal
@@ -141,7 +148,9 @@ export function TurnView({ remote }: Props) {
     send("DISCARD_DRAWN", undefined);
     if (!from || !to || !drawnBefore) return;
     setHideDiscardTopForFlight(true);
-    pushFlight({ from, to, card: drawnBefore, revealAt: null }, () => setHideDiscardTopForFlight(false));
+    pushFlight({ from, to, card: drawnBefore, revealAt: null, scaleFrom: DRAWN_CLOSEUP_SCALE }, () =>
+      setHideDiscardTopForFlight(false),
+    );
   }
 
   function endTurn() {
@@ -323,12 +332,23 @@ export function TurnView({ remote }: Props) {
             Draw from discard
           </button>
         </div>
+      </section>
 
+      <AnimatePresence>
         {drawn && (
-          <div className="pile drawn" style={{ opacity: drawnHiddenForFlight ? 0 : 1 }}>
+          <motion.div
+            key="drawn-closeup"
+            className="drawn-closeup"
+            initial={{ opacity: 0, y: 40, scale: 0.6 }}
+            animate={{ opacity: drawnHiddenForFlight ? 0 : 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -40, scale: 0.8 }}
+            transition={{ type: "spring", stiffness: 220, damping: 22 }}
+          >
             <span className="pile-label">You drew</span>
-            <div ref={drawnRef}>
-              <CardView card={drawn} size="md" />
+            <div ref={drawnRef} className="drawn-closeup-card">
+              <div className="drawn-closeup-scale" style={{ transform: `scale(${DRAWN_CLOSEUP_SCALE})` }}>
+                <CardView card={drawn} size="md" />
+              </div>
             </div>
             {canDiscardDrawn && (
               <button type="button" className="primary" onClick={discardDrawn}>
@@ -338,10 +358,9 @@ export function TurnView({ remote }: Props) {
             {canReplace && !canDiscardDrawn && (
               <p className="muted small-note">Drawn from discard — must be placed into your hand.</p>
             )}
-          </div>
+          </motion.div>
         )}
-        {!drawn && <div className="pile drawn placeholder-slot" aria-hidden="true" />}
-      </section>
+      </AnimatePresence>
 
       <section className="my-hand">
         <h3>Your hand {canReplace && <span className="muted">— tap a slot to replace</span>}</h3>

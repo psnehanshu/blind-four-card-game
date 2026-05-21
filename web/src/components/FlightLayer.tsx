@@ -19,6 +19,12 @@ export interface Flight {
   /** Pixels to lift the arc apex above the higher of from/to. Defaults to 50.
    *  Swap flights vary this so two cards crossing don't trace identical arcs. */
   arcLift?: number;
+  /** Starting scale (default 0.95). Draws/discards from the close-up overlay
+   *  start large so they hand off visually from the held card. */
+  scaleFrom?: number;
+  /** Ending scale (default 1). A deck/discard draw flight ends large because
+   *  the card is being brought "to the player's face". */
+  scaleTo?: number;
   onComplete: () => void;
 }
 
@@ -44,15 +50,19 @@ function FlyingCard({ flight }: { flight: Flight }) {
   const midX = (fromX + toX) / 2;
   const midY = Math.min(fromY, toY) - (flight.arcLift ?? 50);
 
+  const sFrom = flight.scaleFrom ?? 0.95;
+  const sTo = flight.scaleTo ?? 1;
+  const sMid = Math.max(sFrom, sTo) * 1.04;
+
   return (
     <motion.div
       className="flight-card"
-      initial={{ x: fromX, y: fromY, rotate: -6, scale: 0.95 }}
+      initial={{ x: fromX, y: fromY, rotate: -6, scale: sFrom }}
       animate={{
         x: [fromX, midX, toX],
         y: [fromY, midY, toY],
         rotate: [-6, 4, 0],
-        scale: [0.95, 1.04, 1],
+        scale: [sFrom, sMid, sTo],
       }}
       transition={{ duration: 0.55, ease: [0.4, 0.0, 0.2, 1], times: [0, 0.5, 1] }}
       onAnimationComplete={flight.onComplete}

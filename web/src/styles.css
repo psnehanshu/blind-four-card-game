@@ -426,6 +426,50 @@ button.slot-btn:hover:not(:disabled) {
   outline-offset: 2px;
 }
 
+/* Drawn card "close-up": floats above everything as if held to the face.
+   The wrapper itself is pointer-events:none so the hand below remains
+   tappable; only the card and its button capture clicks. */
+.drawn-closeup {
+  position: fixed;
+  top: 14%;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  pointer-events: none;
+}
+
+.drawn-closeup > * {
+  pointer-events: auto;
+}
+
+.drawn-closeup-card {
+  /* Reserve layout space equal to the scaled card so the button below sits
+     clear of it visually AND in hit-testing. (size="md" is 70×100;
+     scale(2) → 140×200.) Scaling happens on the inner wrapper, sized to
+     the un-scaled card, so transformed visual extent === container layout. */
+  width: 140px;
+  height: 200px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  filter: drop-shadow(0 18px 28px rgba(0, 0, 0, 0.55));
+}
+
+.drawn-closeup-scale {
+  width: 70px;
+  height: 100px;
+  transform-origin: 50% 50%;
+}
+
+.drawn-closeup-card .card {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 /* ───────── pile stacks (3D realism) ───────── */
 
 .pile-stack {
@@ -626,14 +670,6 @@ button.slot-btn:hover:not(:disabled) {
   pointer-events: none;
   will-change: transform;
   filter: drop-shadow(0 10px 14px rgba(0, 0, 0, 0.5));
-}
-
-/* Placeholder reserves the same footprint as the drawn pile so the row layout
-   doesn't reflow when the drawn slot mounts/unmounts. */
-.placeholder-slot {
-  visibility: hidden;
-  min-width: 100px; /* card-md width plus padding */
-  min-height: 140px;
 }
 
 /* ───────── animation effects ───────── */
