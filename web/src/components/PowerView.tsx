@@ -222,6 +222,17 @@ function SwapForm({
   const [a, setA] = useState<{ playerId: string | null; cardIndex: number | null }>({ playerId: null, cardIndex: null });
   const [b, setB] = useState<{ playerId: string | null; cardIndex: number | null }>({ playerId: null, cardIndex: null });
 
+  // Two-player games: there's only one valid (A, B) assignment, so skip the
+  // player picks entirely and jump straight to card selection.
+  useEffect(() => {
+    if (visible.players.length !== 2 || a.playerId || b.playerId) return;
+    const p0 = visible.players[0];
+    const p1 = visible.players[1];
+    if (!p0 || !p1) return;
+    setA({ playerId: p0.id, cardIndex: null });
+    setB({ playerId: p1.id, cardIndex: null });
+  }, [visible.players, a.playerId, b.playerId]);
+
   const samePlayer = a.playerId !== null && a.playerId === b.playerId;
   const ready = a.playerId && b.playerId && a.cardIndex !== null && b.cardIndex !== null && !samePlayer;
 
@@ -240,8 +251,24 @@ function SwapForm({
     <div className="power-form">
       <p className="muted">Swap one card between two different players. Locked cards cannot swap.</p>
       <div className="swap-row">
-        <SwapSide label="Player A" visible={visible} displayNames={displayNames} meId={meId} value={a} onChange={setA} />
-        <SwapSide label="Player B" visible={visible} displayNames={displayNames} meId={meId} value={b} onChange={setB} />
+        <SwapSide
+          label="Player A"
+          visible={visible}
+          displayNames={displayNames}
+          meId={meId}
+          value={a}
+          excludePlayerId={b.playerId}
+          onChange={setA}
+        />
+        <SwapSide
+          label="Player B"
+          visible={visible}
+          displayNames={displayNames}
+          meId={meId}
+          value={b}
+          excludePlayerId={a.playerId}
+          onChange={setB}
+        />
       </div>
       {samePlayer && <div className="error">Swap requires two different players.</div>}
       <button type="button" className="primary" disabled={!ready} onClick={submit}>
@@ -257,6 +284,7 @@ function SwapSide({
   displayNames,
   meId,
   value,
+  excludePlayerId,
   onChange,
 }: {
   label: string;
@@ -264,13 +292,17 @@ function SwapSide({
   displayNames: Record<string, string>;
   meId: string;
   value: { playerId: string | null; cardIndex: number | null };
+  excludePlayerId: string | null;
   onChange: (v: { playerId: string | null; cardIndex: number | null }) => void;
 }) {
+  // Hide whichever player the *other* side has already picked so the two
+  // sides can never collide on the same player.
+  const players = excludePlayerId ? visible.players.filter((p) => p.id !== excludePlayerId) : visible.players;
   return (
     <div className="swap-side">
       <PlayerPicker
         label={label}
-        players={visible.players}
+        players={players}
         displayNames={displayNames}
         meId={meId}
         value={value.playerId}
