@@ -200,8 +200,14 @@ async function handleStartGame(
     return;
   }
   const seed = Date.now();
-  store.startGame(gameId, seed, row.playerIds);
-  manager.startEngine(gameId, row.playerIds, seed);
+  // Rotate the lobby order so the first turn lands on a random player. Turn
+  // order (round-robin) is the array order, so rotating preserves the
+  // join-order rhythm while randomizing who goes first. The rotated array is
+  // persisted, so replays + hydration see the same turn sequence.
+  const startOffset = Math.floor(Math.random() * row.playerIds.length);
+  const turnOrder = [...row.playerIds.slice(startOffset), ...row.playerIds.slice(0, startOffset)];
+  store.startGame(gameId, seed, turnOrder);
+  manager.startEngine(gameId, turnOrder, seed);
   await broadcastState(io, store, manager, gameId, [], undefined, undefined);
 }
 
