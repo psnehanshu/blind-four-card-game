@@ -497,8 +497,11 @@ button.slot-btn:hover:not(:disabled) {
 }
 
 /* Hand slots that are valid replacement targets pulse after a card is drawn.
-   Locked slots render as plain divs (not .slot-actionable buttons) and skip this. */
-button.slot-btn.slot-actionable {
+   Locked slots render as plain divs (not .slot-actionable buttons) and skip this.
+   Glow is on the card-stack (the face) rather than the whole button so the slot
+   number label sitting above the card stays outside the halo. */
+button.slot-btn.slot-actionable .card-stack {
+  border-radius: 4px;
   animation: pile-pulse 1.4s ease-in-out infinite;
 }
 
