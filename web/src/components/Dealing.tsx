@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { motion } from "motion/react";
 import { CardView } from "./CardView.js";
 import { DeckStack } from "./Pile.js";
 import { FlightLayer, type Flight } from "./FlightLayer.js";
@@ -93,8 +94,8 @@ export function Dealing({ players, handSize, onComplete }: Props) {
     <div className="screen dealing">
       <h2>{title}</h2>
 
-      <div className={phase === "shuffle" ? "dealing-deck shuffling" : "dealing-deck"} ref={deckRef}>
-        <DeckStack size={Math.max(0, FULL_DECK - settled)} />
+      <div className="dealing-deck" ref={deckRef}>
+        {phase === "shuffle" ? <ShufflingDeck /> : <DeckStack size={Math.max(0, FULL_DECK - settled)} />}
       </div>
 
       <div className="dealing-players">
@@ -123,6 +124,44 @@ export function Dealing({ players, handSize, onComplete }: Props) {
       </div>
 
       <FlightLayer flights={flights} />
+    </div>
+  );
+}
+
+/**
+ * Riffle-style shuffle: two halves of the deck lift up, arc to the side, and
+ * meet in the middle, repeatedly. Each card has a phase-shifted loop so the
+ * stack reads as cards crossing past each other, not as a single shake.
+ */
+function ShufflingDeck() {
+  const cards = 8;
+  return (
+    <div className="shuffling-deck" aria-hidden="true">
+      {Array.from({ length: cards }).map((_, i) => {
+        const side = i % 2 === 0 ? -1 : 1;
+        // Stagger each card's loop so the two halves visibly interleave —
+        // the eye sees them crossing rather than moving in unison.
+        const delay = (i * 0.07) % 0.55;
+        return (
+          <motion.div
+            key={i}
+            className="shuffling-card"
+            style={{ zIndex: i }}
+            animate={{
+              x: [0, side * 46, side * 14, 0, side * -8, 0],
+              y: [0, -34, -18, -6, -22, 0],
+              rotate: [0, side * 18, side * 6, 0, side * -4, 0],
+            }}
+            transition={{
+              duration: 1.05,
+              delay,
+              repeat: Infinity,
+              ease: "easeInOut",
+              times: [0, 0.2, 0.42, 0.6, 0.8, 1],
+            }}
+          />
+        );
+      })}
     </div>
   );
 }

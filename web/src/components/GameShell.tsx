@@ -40,23 +40,7 @@ export function GameShell({ remote }: Props) {
     if (validEvents.includes("ACKNOWLEDGE_REVEAL")) {
       return <InitialReveal remote={remote} />;
     }
-    const pending = visibleState.players.filter((p) => !p.acknowledgedReveal);
-    return (
-      <div className="screen reveal">
-        <h2>Waiting for the other players to acknowledge…</h2>
-        <p className="muted">Play starts as soon as everyone has memorized their hand.</p>
-        {pending.length > 0 && (
-          <section className="form-block">
-            <h3>Still memorizing their hand</h3>
-            <ul className="player-list">
-              {pending.map((p) => (
-                <li key={p.id}>{playerNameFor(p.id, identity.playerId, displayNames, p.name)}</li>
-              ))}
-            </ul>
-          </section>
-        )}
-      </div>
-    );
+    return <WaitingForAcknowledge remote={remote} />;
   }
 
   const myTurn = visibleState.players[visibleState.currentTurn]?.id === identity.playerId;
@@ -66,6 +50,69 @@ export function GameShell({ remote }: Props) {
       <div className={`my-turn-outline${myTurn ? " is-active" : ""}`} aria-hidden="true" />
       <ShuffleNotice remote={remote} />
     </>
+  );
+}
+
+const SEAT_COLORS = ["#3d8bff", "#5cd99a", "#f5c542", "#ff8a8a", "#c084fc", "#22d3ee"];
+
+function seatInitials(name: string): string {
+  const trimmed = name.trim();
+  if (!trimmed) return "?";
+  const parts = trimmed.split(/\s+/);
+  const first = parts[0]?.[0] ?? "";
+  const last = parts.length > 1 ? (parts[parts.length - 1]?.[0] ?? "") : "";
+  return (first + last).toUpperCase() || "?";
+}
+
+/**
+ * Shown while we've already acknowledged but at least one other player is
+ * still memorizing. Mirrors the Lobby's chip-style seat list so the wait
+ * feels active rather than dead — each seat shows ready / memorizing state
+ * and the memorizing avatars gently pulse.
+ */
+function WaitingForAcknowledge({ remote }: { remote: RemoteEngine }) {
+  const { identity, visibleState, displayNames } = remote;
+  if (!identity || !visibleState) return null;
+  const players = visibleState.players;
+  const pendingCount = players.filter((p) => !p.acknowledgedReveal).length;
+
+  return (
+    <div className="screen reveal-waiting">
+      <h2>Waiting on the table…</h2>
+      <p className="muted">
+        {pendingCount === 1
+          ? "1 player is still memorizing their hand."
+          : `${pendingCount} players are still memorizing their hand.`}
+      </p>
+
+      <ul className="lobby-seats reveal-seats">
+        {players.map((p, i) => {
+          const color = SEAT_COLORS[i % SEAT_COLORS.length] ?? SEAT_COLORS[0];
+          const isYou = p.id === identity.playerId;
+          const name = playerNameFor(p.id, identity.playerId, displayNames, p.name);
+          const ready = p.acknowledgedReveal;
+          return (
+            <motion.li
+              key={p.id}
+              layout
+              initial={{ opacity: 0, y: 10, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              transition={{ type: "spring", stiffness: 320, damping: 26 }}
+              className={`lobby-seat filled reveal-seat${ready ? " is-ready" : " is-waiting"}`}
+            >
+              <span className="seat-avatar" style={{ background: color }}>
+                {seatInitials(name)}
+              </span>
+              <span className="seat-name">
+                {name}
+                {isYou && <span className="muted seat-you"> (you)</span>}
+              </span>
+              <span className={`reveal-status ${ready ? "ok" : "pending"}`}>{ready ? "Ready" : "Memorizing…"}</span>
+            </motion.li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }
 
