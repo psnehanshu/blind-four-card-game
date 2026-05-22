@@ -204,7 +204,6 @@ export function SpectatorView({ remote }: Props) {
       </AnimatePresence>
 
       <section className="opponents">
-        <h3>Other players</h3>
         <div className="opponent-list">
           {others.map((op) => {
             const markers = new Map(
@@ -262,7 +261,6 @@ export function SpectatorView({ remote }: Props) {
       </section>
 
       <section className="my-hand">
-        <h3>Your hand</h3>
         <Hand className="hand" shakeNonce={shuffleNonceFor(myId)}>
           {Array.from({ length: myHandSize }).map((_, i) => {
             const marker = myMarkers.get(i);

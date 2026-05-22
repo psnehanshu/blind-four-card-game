@@ -7,6 +7,7 @@ import type {
   PeekResult,
   PowerAction,
   ProposedEventType,
+  Rank,
 } from "../../../engine/types.js";
 import type { RemoteEngine } from "../net/useRemoteEngine.js";
 import { CardView } from "./CardView.js";
@@ -43,6 +44,28 @@ function rectCenter(el: HTMLElement | null): { x: number; y: number } | null {
   if (!el) return null;
   const r = el.getBoundingClientRect();
   return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+}
+
+/** One-line hint shown under "You drew" for cards with special meaning —
+ *  the four power ranks, the wild Joker, and 7 (which is worth zero). All
+ *  other ranks return null and no hint is rendered. */
+function drawnCardHint(rank: Rank): string | null {
+  switch (rank) {
+    case "10":
+      return "Peek";
+    case "J":
+      return "Shuffle";
+    case "Q":
+      return "Swap";
+    case "K":
+      return "Lock";
+    case "JOKER":
+      return "Wild — mimic any power";
+    case "7":
+      return "Value 0";
+    default:
+      return null;
+  }
 }
 
 export function TurnView({ remote }: Props) {
@@ -459,7 +482,6 @@ export function TurnView({ remote }: Props) {
       </AnimatePresence>
 
       <section className="opponents">
-        <h3>Opponents</h3>
         <div className="opponent-list">
           {opponents.map((op) => {
             const markers = new Map(
@@ -582,6 +604,9 @@ export function TurnView({ remote }: Props) {
               </div>
               <div className="drawn-closeup-banner">
                 <span className="drawn-closeup-caption">You drew</span>
+                {drawn && drawnCardHint(drawn.rank) && (
+                  <span className="drawn-closeup-hint">{drawnCardHint(drawn.rank)}</span>
+                )}
                 {canDiscardDrawn && (
                   <button type="button" className="primary small" onClick={discardDrawn}>
                     {drawn && isPowerCard(drawn.rank) ? "Use power" : "Discard this card"}
@@ -597,7 +622,7 @@ export function TurnView({ remote }: Props) {
       </AnimatePresence>
 
       <section className="my-hand">
-        <h3>Your hand {canReplace && <span className="muted">— tap a slot to replace</span>}</h3>
+        {canReplace && <p className="my-hand-hint muted">Tap a slot to replace.</p>}
         <Hand className="hand" shakeNonce={shuffleNonceFor(playerId)}>
           {Array.from({ length: handSize }).map((_, i) => {
             const marker = myMarkers.get(i);
