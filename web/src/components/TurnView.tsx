@@ -121,12 +121,6 @@ export function TurnView({ remote }: Props) {
   const dispatchRef = useRef(dispatch);
   dispatchRef.current = dispatch;
 
-  // TurnView only mounts when control passes to this client, so a mount-only
-  // effect is the right hook for the "your turn" cue.
-  useEffect(() => {
-    playYourTurn();
-  }, []);
-
   function setSlotRef(handPlayerId: string, cardIndex: number) {
     return (el: HTMLElement | null) => {
       slotRefs.current.set(`${handPlayerId}-${cardIndex}`, el);
@@ -474,6 +468,35 @@ export function TurnView({ remote }: Props) {
 
     return clearAutoEnd;
   }, [canEnd, canShowdown, inPower, peekOpen]);
+
+  // Nag the player that it's their turn if they don't draw soon. Mirrors the
+  // lock-pick nag: first prompt at 5s, then end-anchored gaps of 4s, 3.5s,
+  // 3s, 2.5s, 2s floor — so the audio is never cut off by the next play.
+  useEffect(() => {
+    if (!canDraw) return;
+    const gaps = [5000, 4000, 3500, 3000, 2500, 2000];
+    let step = 0;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const schedule = (delay: number): void => {
+      if (cancelled) return;
+      timer = setTimeout(() => {
+        if (cancelled) return;
+        const clipMs = playYourTurn();
+        step += 1;
+        const nextGap = gaps[Math.min(step, gaps.length - 1)] ?? 2000;
+        schedule(clipMs + nextGap);
+      }, delay);
+    };
+
+    schedule(gaps[0] ?? 5000);
+
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [canDraw]);
 
   function shuffleNonceFor(handPlayerId: string): number | undefined {
     if (cue?.kind === "shuffle" && cue.targetPlayerId === handPlayerId) return cue.nonce;

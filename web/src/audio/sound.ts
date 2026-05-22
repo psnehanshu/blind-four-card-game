@@ -294,10 +294,14 @@ export function playSadTrombone(): void {
   lastTime.set("sad", t0 + 1.95);
 }
 
-export function playYourTurn(): void {
-  if (!voices || !voices.yourTurn.loaded) return;
-  if (voices.yourTurn.state === "started") voices.yourTurn.stop();
+/** Plays the clip and returns its duration in milliseconds (0 if not loaded
+ *  or already playing). Callers schedule their next nag relative to the
+ *  returned end time so prompts don't talk over each other. */
+export function playYourTurn(): number {
+  if (!voices || !voices.yourTurn.loaded) return 0;
+  if (voices.yourTurn.state === "started") return 0;
   voices.yourTurn.start();
+  return voices.yourTurn.buffer.duration * 1000;
 }
 
 /** Plays the clip and returns its duration in milliseconds (0 if not loaded
