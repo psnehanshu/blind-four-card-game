@@ -59,6 +59,15 @@ export function TurnView({ remote }: Props) {
   // Same shape, for the lock power — awaits a click on any unlocked card.
   const [lockPickWrap, setLockPickWrap] = useState<{ fn: PowerWrap } | null>(null);
 
+  // Set to true the moment we dispatch a power that was driven by an in-place
+  // picker (lock or opponent-peek). Stays true until the server confirms
+  // (inPower flips false), at which point the cleanup effect resets it.
+  // Two jobs: (1) prevent double-click from sending duplicate USE_POWERs, and
+  // (2) let us keep lockPickWrap / opponentPeekWrap set after the click so
+  // the Dialog doesn't briefly reopen with a stale PowerView (joker picker /
+  // peek form) while we wait for STATE.
+  const dispatchedRef = useRef(false);
+
   // ───── Flight refs + state ─────
   const deckRef = useRef<HTMLButtonElement | null>(null);
   const discardRef = useRef<HTMLButtonElement | null>(null);
@@ -264,16 +273,25 @@ export function TurnView({ remote }: Props) {
   }, [peekResult, visible.players, displayNames, clearPeek, playerId]);
 
   function pickOpponentPeek(opponentId: string, cardIndex: number) {
+    if (dispatchedRef.current) return;
     const wrap = opponentPeekWrap?.fn;
     if (!wrap) return;
-    setOpponentPeekWrap(null);
+    dispatchedRef.current = true;
+    // Intentionally don't clear opponentPeekWrap here — the cleanup effect
+    // does that when the server confirms the power. Clearing now would let
+    // the Dialog re-evaluate with !awaitingOpponentPick=true while inPower is
+    // still true (no STATE yet), briefly remounting PowerView's peek form.
     dispatch("USE_POWER", wrap({ power: "peek", target: "opponent", opponentId, opponentCardIndex: cardIndex }));
   }
 
   function pickLockTarget(targetPlayerId: string, cardIndex: number) {
+    if (dispatchedRef.current) return;
     const wrap = lockPickWrap?.fn;
     if (!wrap) return;
-    setLockPickWrap(null);
+    dispatchedRef.current = true;
+    // Same rationale as pickOpponentPeek: leave lockPickWrap set so the
+    // Dialog doesn't briefly reopen with the (stale) Joker rank picker or K
+    // resolve header while we wait for the server STATE response.
     dispatch("USE_POWER", wrap({ power: "lock", targetPlayerId, cardIndex }));
   }
 
@@ -289,7 +307,14 @@ export function TurnView({ remote }: Props) {
   const lockArmedRef = useRef(false);
   useEffect(() => {
     if (!inPowerNow) {
+      // Power phase ended — server confirmed the action (or it never started).
+      // Tear down any in-place picker state. Keeping wraps set across the
+      // user-click → server-STATE gap is what prevents the Dialog flicker;
+      // this is where we release them once it's safe.
       lockArmedRef.current = false;
+      dispatchedRef.current = false;
+      setLockPickWrap(null);
+      setOpponentPeekWrap(null);
       return;
     }
     if (lockArmedRef.current) return;
@@ -471,15 +496,24 @@ export function TurnView({ remote }: Props) {
       </section>
 
       <section className="center-row">
-        <div className={`pile${canDraw && visible.deckSize > 0 ? " is-active" : ""}`}>
+        <div className={`pile${canDraw && (visible.deckSize > 0 || visible.discardPile.length > 1) ? " is-active" : ""}`}>
           <span className="pile-label">Deck ({visible.deckSize})</span>
           <button
             ref={deckRef}
             type="button"
             className="slot-btn"
-            disabled={!canDraw || visible.deckSize === 0}
+            // Engine recycles the discard pile (minus its top) into a fresh
+            // deck on the next deck-draw, so the button stays clickable while
+            // the discard still has reshufflable cards. Only disabled when
+            // truly nothing is drawable.
+            disabled={!canDraw || (visible.deckSize === 0 && visible.discardPile.length <= 1)}
             onClick={() => drawFrom("deck")}
             aria-label="Draw from deck"
+            title={
+              visible.deckSize === 0 && visible.discardPile.length > 1
+                ? "Deck is empty — drawing reshuffles the discard pile"
+                : undefined
+            }
           >
             <DeckStack size={visible.deckSize} />
           </button>
