@@ -9,7 +9,7 @@ import type {
 } from "../../../engine/types.js";
 import type { ServerMsg } from "../../../server/wire.js";
 import { getCardValue } from "../../../engine/cards.js";
-import { send, subscribe } from "./socket.js";
+import { isConnected, send, subscribe, subscribeConnect } from "./socket.js";
 import { deriveCue, type AnimationCue } from "../game/cue.js";
 import { playForCue, playSadTrombone } from "../audio/sound.js";
 
@@ -187,6 +187,49 @@ export function useRemoteEngine(initial: InitialAction): RemoteEngine {
       send(baseMsg);
     }
   }, [initial]);
+
+  // Reconnect resync: after socket.io re-establishes the connection (network
+  // blip, server reboot, OS-suspended tab), the server-side Socket is fresh —
+  // no socket.data, not in our room. Re-send JOIN_GAME with the cached
+  // sessionToken so the server rebinds us and pushes a fresh STATE.
+  useEffect(() => {
+    const onConnect = (): void => {
+      const id = identityRef.current;
+      if (!id) return;
+      send({
+        kind: "JOIN_GAME",
+        gameId: id.gameId,
+        // displayName is required by the wire schema but ignored on token
+        // resume — the server keeps whatever was stored at original join.
+        displayName: "",
+        sessionToken: id.sessionToken,
+      });
+    };
+    return subscribeConnect(onConnect);
+  }, []);
+
+  // Staleness catcher: when the tab returns to the foreground or the network
+  // flips back online, request a fresh snapshot if our socket is still up.
+  // (If it's down, the reconnect path above will handle it.)
+  useEffect(() => {
+    const refresh = (): void => {
+      const id = identityRef.current;
+      if (!id) return;
+      if (!isConnected()) return;
+      send({ kind: "REQUEST_STATE", gameId: id.gameId });
+    };
+    const onVisibility = (): void => {
+      if (document.visibilityState === "visible") refresh();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("online", refresh);
+    window.addEventListener("focus", refresh);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("online", refresh);
+      window.removeEventListener("focus", refresh);
+    };
+  }, []);
 
   useEffect(() => {
     if (!cue) return;

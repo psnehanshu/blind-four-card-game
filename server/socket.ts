@@ -51,6 +51,10 @@ function parseClientMsg(raw: unknown): ClientMsg | null {
     if (!type) return null;
     return { kind, gameId: raw.gameId, type, payload: raw.payload };
   }
+  if (kind === "REQUEST_STATE") {
+    if (typeof raw.gameId !== "string") return null;
+    return { kind, gameId: raw.gameId };
+  }
   return null;
 }
 
@@ -95,6 +99,8 @@ export function attachSocketHandlers(io: Server, store: Store, manager: GameMana
           void handleStartGame(socket, io, store, manager, msg.gameId);
         } else if (msg.kind === "GAME_EVENT") {
           void handleGameEvent(socket, io, store, manager, msg);
+        } else if (msg.kind === "REQUEST_STATE") {
+          handleRequestState(socket, store, manager, msg.gameId);
         }
       } catch (e) {
         const message = e instanceof Error ? e.message : String(e);
@@ -148,7 +154,9 @@ async function handleJoinGame(
       if (row.status === "lobby") {
         broadcastLobby(io, store, msg.gameId);
       } else {
-        await broadcastState(io, store, manager, msg.gameId, [], undefined, undefined);
+        // Token resume on a running game: refresh only the rejoiner. The rest
+        // of the room hasn't changed and doesn't need another STATE push.
+        sendStateTo(socket, store, manager, msg.gameId, resolved.playerId);
       }
       return;
     }
@@ -318,4 +326,51 @@ async function broadcastState(
     };
     s.emit(MSG_CHANNEL, msg);
   }
+}
+
+/**
+ * Send a single fresh STATE snapshot to one socket. Used for reconnect /
+ * resume / explicit REQUEST_STATE — no `lastEvents` so the client doesn't
+ * replay animations or sounds for actions it already processed.
+ */
+function sendStateTo(socket: Socket, store: Store, manager: GameManager, gameId: string, playerId: string): void {
+  const row = store.loadGameRow(gameId);
+  if (!row) return;
+  const snap = manager.snapshotFor(gameId, playerId, [], undefined);
+  if (!snap) return;
+  const msg: ServerMsg = {
+    kind: "STATE",
+    gameId,
+    visibleState: snap.visibleState,
+    validEvents: snap.validEvents,
+    drawnCard: snap.drawnCard,
+    lastEvents: [],
+    displayNames: row.displayNames,
+    ...(snap.winnerIds ? { winnerIds: snap.winnerIds } : {}),
+  };
+  send(socket, msg);
+}
+
+/**
+ * Reply to a client's explicit refresh request. Silently no-ops on sockets
+ * we don't recognize (e.g., a REQUEST_STATE that races ahead of the
+ * post-reconnect JOIN_GAME); the JOIN itself will deliver a fresh snapshot.
+ */
+function handleRequestState(socket: Socket, store: Store, manager: GameManager, gameId: string): void {
+  const data = socketData(socket);
+  if (data.gameId !== gameId || !data.playerId) return;
+  const row = store.loadGameRow(gameId);
+  if (!row) {
+    send(socket, { kind: "ERROR", message: "No such game" });
+    return;
+  }
+  if (row.status === "lobby") {
+    const players = row.playerIds.map((pid) => ({
+      playerId: pid,
+      displayName: row.displayNames[pid] ?? pid,
+    }));
+    send(socket, { kind: "LOBBY", gameId, hostPlayerId: row.hostPlayerId, players });
+    return;
+  }
+  sendStateTo(socket, store, manager, gameId, data.playerId);
 }

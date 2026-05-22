@@ -16,7 +16,13 @@ export type ClientMsg =
       type: ProposedEventType;
       /** Engine deep-validates the payload after we narrow it on the server. */
       payload: unknown;
-    };
+    }
+  /**
+   * Pull the latest snapshot for this player on demand. Used by clients that
+   * suspect they've drifted (tab returned from background, network blip, etc.)
+   * Reply is a single STATE/LOBBY sent only to the requesting socket.
+   */
+  | { kind: "REQUEST_STATE"; gameId: string };
 
 /** Server → Client messages, broadcast as a single typed "msg" socket.io event. */
 export type ServerMsg =

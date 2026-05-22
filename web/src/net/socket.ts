@@ -35,3 +35,21 @@ export function subscribe(handler: Handler): () => void {
     s.off(MSG_CHANNEL, wrapped);
   };
 }
+
+/**
+ * Fires on each successful (re)connect. Use this to re-establish session
+ * state after socket.io reconnects — at that point the server has a fresh
+ * Socket with empty data and isn't in our io room until we rejoin.
+ */
+export function subscribeConnect(handler: () => void): () => void {
+  const s = getSocket();
+  s.on("connect", handler);
+  return () => {
+    s.off("connect", handler);
+  };
+}
+
+/** True when the underlying socket is currently connected to the server. */
+export function isConnected(): boolean {
+  return getSocket().connected;
+}
