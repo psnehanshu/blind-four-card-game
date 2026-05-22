@@ -779,6 +779,40 @@ button.slot-btn.slot-actionable .card-stack {
   padding: 6px 10px;
 }
 
+/* Right-side action cluster in .turn-header — hosts peek/lock prompts and
+   the showdown chip. Wraps so two simultaneously-shown chips don't overflow
+   the header on narrow screens (though in practice they're mutually
+   exclusive in the current flow). */
+.turn-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+/* Compact prompt chip — replaces the larger .peek-in-hand-prompt that used
+   to live in the screen flow. Yellow tint mirrors the old prompt so the
+   semantic ("you must act") carries over. */
+.peek-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background: rgba(245, 197, 66, 0.12);
+  border: 1px solid rgba(245, 197, 66, 0.4);
+  border-radius: 8px;
+  max-width: 60vw;
+}
+
+.peek-chip-note {
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .placeholder {
   background: rgba(245, 197, 66, 0.1);
   border: 1px solid rgba(245, 197, 66, 0.3);

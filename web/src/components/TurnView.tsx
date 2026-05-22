@@ -400,11 +400,36 @@ export function TurnView({ remote }: Props) {
     <div className="screen screen--locked turn">
       <header className="turn-header">
         <h2>Your turn</h2>
-        {canShowdown && endCountdown !== null && (
-          <button type="button" className="primary small showdown-btn" onClick={callShowdown}>
-            Showdown ({endCountdown})
-          </button>
-        )}
+        <div className="turn-header-actions">
+          {awaitingOpponentPick && (
+            <div className="peek-chip">
+              <span className="peek-chip-note">Tap an opponent card</span>
+              <button type="button" className="ghost small" onClick={() => setOpponentPeekWrap(null)}>
+                Cancel
+              </button>
+            </div>
+          )}
+          {awaitingLockPick && (
+            <div className="peek-chip">
+              <span className="peek-chip-note">Tap any unlocked card to lock</span>
+            </div>
+          )}
+          {peekDisplay && (
+            <div className="peek-chip">
+              <span className="peek-chip-note">
+                {peekDisplay.kind === "own" ? "Memorize your cards" : `Peeking ${peekDisplay.playerName}`}
+              </span>
+              <button type="button" className="primary small" onClick={() => setPeekDisplay(null)}>
+                Done
+              </button>
+            </div>
+          )}
+          {canShowdown && endCountdown !== null && (
+            <button type="button" className="primary small showdown-btn" onClick={callShowdown}>
+              Showdown ({endCountdown})
+            </button>
+          )}
+        </div>
       </header>
 
       <AnimatePresence>
@@ -627,34 +652,6 @@ export function TurnView({ remote }: Props) {
           })}
         </Hand>
       </section>
-
-      {awaitingOpponentPick && (
-        <section className="peek-in-hand-prompt">
-          <p className="muted small-note">Tap any opponent card to peek it.</p>
-          <button type="button" className="ghost small" onClick={() => setOpponentPeekWrap(null)}>
-            Cancel
-          </button>
-        </section>
-      )}
-
-      {awaitingLockPick && (
-        <section className="peek-in-hand-prompt">
-          <p className="muted small-note">Tap any unlocked card — yours or an opponent&rsquo;s — to lock it.</p>
-        </section>
-      )}
-
-      {peekDisplay && (
-        <section className="peek-in-hand-prompt">
-          <p className="muted small-note">
-            {peekDisplay.kind === "own"
-              ? "Memorize your cards — they’ll flip face-down when you click Done."
-              : `Peeking ${peekDisplay.playerName}’s card — click Done when you’ve memorized it.`}
-          </p>
-          <button type="button" className="primary big" onClick={() => setPeekDisplay(null)}>
-            Done
-          </button>
-        </section>
-      )}
 
       <Dialog open={inPower && !peekDisplay && flights.length === 0 && !awaitingOpponentPick && !awaitingLockPick}>
         {inPower && !peekDisplay && !awaitingOpponentPick && !awaitingLockPick && (
