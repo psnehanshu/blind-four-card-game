@@ -309,6 +309,9 @@ export function TurnView({ remote }: Props) {
     visible.lockMarkers.filter((lm) => lm.playerId === playerId).map((lm) => [lm.cardIndex, lm.markerCard]),
   );
   const handSize = me?.handSize ?? 4;
+  // Discard-pile draws must be placed into the hand, so they're impossible
+  // when every own slot is already locked.
+  const allMyCardsLocked = me ? me.lockedCards.length >= me.handSize : false;
 
   const canDraw = validEvents.includes("DRAW_CARD");
   const canReplace = validEvents.includes("REPLACE_CARD");
@@ -482,15 +485,16 @@ export function TurnView({ remote }: Props) {
           </button>
         </div>
 
-        <div className={`pile${canDraw && visible.discardPile.length > 0 ? " is-active" : ""}`}>
+        <div className={`pile${canDraw && visible.discardPile.length > 0 && !allMyCardsLocked ? " is-active" : ""}`}>
           <span className="pile-label">Discard ({visible.discardPile.length})</span>
           <button
             ref={discardRef}
             type="button"
             className="slot-btn"
-            disabled={!canDraw || visible.discardPile.length === 0}
+            disabled={!canDraw || visible.discardPile.length === 0 || allMyCardsLocked}
             onClick={() => drawFrom("discard")}
             aria-label="Draw from discard"
+            title={allMyCardsLocked ? "All your cards are locked — draw from the deck instead" : undefined}
           >
             <DiscardStack cards={renderedDiscardPile} />
           </button>

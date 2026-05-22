@@ -327,6 +327,14 @@ export class GameEngine {
       const source = payload.source ?? "deck";
       if (source === "discard") {
         if (this.game.discardPile.length === 0) return "Discard pile is empty";
+        // A card drawn from the discard pile must be placed into the hand
+        // (it can't be discarded back). If every slot is locked, no valid
+        // replace target exists — reject the draw up front instead of letting
+        // the player get stuck in the decision phase.
+        const player = this.game.players[this.game.currentTurn];
+        if (player && player.hand.every((c) => c.locked)) {
+          return "All your cards are locked — cannot draw from the discard pile";
+        }
       } else if (this.game.deck.length === 0) return "Deck is empty";
     } else if (eventType === "REPLACE_CARD" || eventType === "DISCARD_DRAWN") {
       if (this.phase !== "decision") return "Must replace or discard drawn card";

@@ -360,6 +360,32 @@ describe("GameEngine — turn flow", () => {
     assert.equal(r.error, undefined);
   });
 
+  it("rejects draw from discard when every hand card is locked", () => {
+    // A discard-pile draw must be placed into the hand; with all four slots
+    // locked there's no legal replace target, so the draw is rejected upfront.
+    const e = setup();
+    const players = turnOrder(e);
+    const pid = players[0];
+    const pid2 = players[1];
+    assert.ok(pid);
+    assert.ok(pid2);
+    // Seed the discard pile with one card so the source check itself passes.
+    e.processEvent(pid, "DRAW_CARD", { source: "deck" });
+    e.processEvent(pid, "DISCARD_DRAWN", undefined);
+    e.processEvent(pid, "END_TURN", undefined);
+
+    // Force-lock all of pid2's hand (test escape hatch documented in CLAUDE.md).
+    const player2 = e.getState().players.find((p) => p.id === pid2);
+    assert.ok(player2);
+    for (const card of player2.hand) card.locked = true;
+
+    const r = e.processEvent(pid2, "DRAW_CARD", { source: "discard" });
+    assert.match(r.error ?? "", /All your cards are locked/);
+    // Deck draw is still allowed (the rule is specific to discard-draws).
+    const r2 = e.processEvent(pid2, "DRAW_CARD", { source: "deck" });
+    assert.equal(r2.error, undefined);
+  });
+
   it("deck draw is rejected when deck is empty", () => {
     const e = startGame({ playerIds: ["a", "b"], seed: 1 });
     const players = turnOrder(e);
