@@ -1,6 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import type { Card, EventPayloadMap, PeekResult, ProposedEventType } from "../../../engine/types.js";
+import type {
+  BasePowerAction,
+  Card,
+  EventPayloadMap,
+  PeekResult,
+  PowerAction,
+  ProposedEventType,
+} from "../../../engine/types.js";
 import type { RemoteEngine } from "../net/useRemoteEngine.js";
 import { CardView } from "./CardView.js";
 import { PowerView } from "./PowerView.js";
@@ -15,10 +22,11 @@ import { playerNameFor } from "../util/playerName.js";
 import { playPeek, playShowdown, playYourTurn } from "../audio/sound.js";
 import { isPowerCard } from "../../../engine/cards.js";
 
-interface PeekDisplay {
-  playerName: string;
-  cards: PeekResult["cards"];
-}
+type PeekDisplay =
+  | { kind: "own"; cards: PeekResult["cards"] }
+  | { kind: "opponent"; playerId: string; playerName: string; cards: PeekResult["cards"] };
+
+type PeekWrap = (a: BasePowerAction) => PowerAction;
 
 const DRAWN_CLOSEUP_SCALE = 2.6;
 // After entering showdown_eligible, give the player a window before auto-ending.
@@ -44,6 +52,10 @@ export function TurnView({ remote }: Props) {
   const visible = visibleState;
   const drawn: Card | null = drawnCard;
   const [peekDisplay, setPeekDisplay] = useState<PeekDisplay | null>(null);
+  // When set, the player has opted to peek an opponent and we're awaiting a
+  // card click in the opponents' hands. Holds the Joker-wrap function so the
+  // eventual USE_POWER dispatch packages correctly for both raw 10 and Joker.
+  const [opponentPeekWrap, setOpponentPeekWrap] = useState<{ fn: PeekWrap } | null>(null);
 
   // ───── Flight refs + state ─────
   const deckRef = useRef<HTMLButtonElement | null>(null);
@@ -228,15 +240,33 @@ export function TurnView({ remote }: Props) {
     setFlights((prev) => [...prev, flightA, flightB]);
   }, [cue]);
 
-  // Surface the server's peek result to the player who triggered it.
+  // Surface the server's peek result to the player who triggered it. Both own
+  // and opponent peeks reveal cards in place (the opponent variant inside the
+  // opponent's hand row); no dialog is involved.
   useEffect(() => {
     if (!peekResult) return;
-    const target = visible.players.find((p) => p.id === peekResult.playerId);
-    const targetName = playerNameFor(peekResult.playerId, playerId, displayNames, target?.name);
-    setPeekDisplay({ playerName: targetName, cards: peekResult.cards });
+    if (peekResult.playerId === playerId) {
+      setPeekDisplay({ kind: "own", cards: peekResult.cards });
+    } else {
+      const target = visible.players.find((p) => p.id === peekResult.playerId);
+      const targetName = playerNameFor(peekResult.playerId, playerId, displayNames, target?.name);
+      setPeekDisplay({
+        kind: "opponent",
+        playerId: peekResult.playerId,
+        playerName: targetName,
+        cards: peekResult.cards,
+      });
+    }
     playPeek();
     clearPeek();
-  }, [peekResult, visible.players, displayNames, clearPeek]);
+  }, [peekResult, visible.players, displayNames, clearPeek, playerId]);
+
+  function pickOpponentPeek(opponentId: string, cardIndex: number) {
+    const wrap = opponentPeekWrap?.fn;
+    if (!wrap) return;
+    setOpponentPeekWrap(null);
+    dispatch("USE_POWER", wrap({ power: "peek", target: "opponent", opponentId, opponentCardIndex: cardIndex }));
+  }
 
   function callShowdown() {
     clearAutoEnd();
@@ -259,7 +289,7 @@ export function TurnView({ remote }: Props) {
   // Auto-end the turn once we enter showdown_eligible. Waits 5s if showdown is a
   // legal call (so the player can decide), else just buffers long enough for
   // discard/power animations to land. Clicking Call Showdown cancels the timer.
-  const peekOpen = !!peekDisplay;
+  const peekOpen = !!peekDisplay || !!opponentPeekWrap;
   useEffect(() => {
     if (!canEnd || inPower || peekOpen) {
       clearAutoEnd();
@@ -292,6 +322,18 @@ export function TurnView({ remote }: Props) {
   }
 
   const renderedDiscardPile = hideDiscardTopForFlight ? visible.discardPile.slice(0, -1) : visible.discardPile;
+
+  // Map of own hand indices currently revealed by the in-place own peek.
+  const ownPeekMap = new Map<number, Card>();
+  if (peekDisplay?.kind === "own") {
+    for (const c of peekDisplay.cards) ownPeekMap.set(c.index, c.card);
+  }
+  // Map of opponent (playerId, index) → card revealed by an opponent peek.
+  const opponentPeekMap = new Map<string, Card>();
+  if (peekDisplay?.kind === "opponent") {
+    for (const c of peekDisplay.cards) opponentPeekMap.set(`${peekDisplay.playerId}-${c.index}`, c.card);
+  }
+  const awaitingOpponentPick = !!opponentPeekWrap;
 
   return (
     <div className="screen turn">
@@ -341,7 +383,10 @@ export function TurnView({ remote }: Props) {
                     const locked = !!marker;
                     const sn = locked ? undefined : shuffleNonceFor(op.id);
                     const hidden = hiddenSlots.has(`${op.id}-${i}`);
-                    const cardView = (
+                    const peekedOpCard = opponentPeekMap.get(`${op.id}-${i}`);
+                    const cardView = peekedOpCard ? (
+                      <PeekCardFlip card={peekedOpCard} index={i} ownerName={op.id} lockMarker={marker} size="sm" />
+                    ) : (
                       <CardView hidden lockMarker={marker} label={`#${i + 1}`} size="sm" tilt={tiltForSlot(op.id, i)} />
                     );
                     const inner = locked ? (
@@ -351,6 +396,19 @@ export function TurnView({ remote }: Props) {
                         {cardView}
                       </ShuffleSlot>
                     );
+                    if (awaitingOpponentPick) {
+                      return (
+                        <button
+                          key={i}
+                          ref={setSlotRef(op.id, i)}
+                          type="button"
+                          className={hidden ? "slot-btn slot-actionable slot-hidden" : "slot-btn slot-actionable"}
+                          onClick={() => pickOpponentPeek(op.id, i)}
+                        >
+                          {inner}
+                        </button>
+                      );
+                    }
                     return (
                       <div key={i} ref={setSlotRef(op.id, i)} className={hidden ? "slot-hidden" : undefined}>
                         {inner}
@@ -433,7 +491,12 @@ export function TurnView({ remote }: Props) {
             const tilt = tiltForSlot(playerId, i);
             const sn = locked ? undefined : shuffleNonceFor(playerId);
             const hidden = hiddenSlots.has(`${playerId}-${i}`);
-            const cardView = <CardView hidden lockMarker={marker} label={`#${i + 1}`} size="lg" tilt={tilt} />;
+            const peekedCard = ownPeekMap.get(i);
+            const cardView = peekedCard ? (
+              <PeekCardFlip card={peekedCard} index={i} ownerName={playerId} lockMarker={marker} />
+            ) : (
+              <CardView hidden lockMarker={marker} label={`#${i + 1}`} size="lg" tilt={tilt} />
+            );
             const inner = locked ? (
               cardView
             ) : (
@@ -463,24 +526,31 @@ export function TurnView({ remote }: Props) {
         </Hand>
       </section>
 
-      <Dialog open={inPower && !peekDisplay && flights.length === 0}>
-        {inPower && !peekDisplay && <PowerView remote={remote} />}
-      </Dialog>
+      {awaitingOpponentPick && (
+        <section className="peek-in-hand-prompt">
+          <p className="muted small-note">Tap any opponent card to peek it.</p>
+          <button type="button" className="ghost small" onClick={() => setOpponentPeekWrap(null)}>
+            Cancel
+          </button>
+        </section>
+      )}
 
-      <Dialog open={!!peekDisplay}>
-        {peekDisplay && (
-          <section className="peek-result">
-            <h3>Peek result — {peekDisplay.playerName}</h3>
-            <div className="hand">
-              {peekDisplay.cards.map((c) => (
-                <PeekCardFlip key={c.index} card={c.card} index={c.index} ownerName={peekDisplay.playerName} />
-              ))}
-            </div>
-            <p className="muted">Only you can see this. Memorize it before continuing.</p>
-            <button type="button" className="primary big" onClick={() => setPeekDisplay(null)}>
-              Done
-            </button>
-          </section>
+      {peekDisplay && (
+        <section className="peek-in-hand-prompt">
+          <p className="muted small-note">
+            {peekDisplay.kind === "own"
+              ? "Memorize your cards — they’ll flip face-down when you click Done."
+              : `Peeking ${peekDisplay.playerName}’s card — click Done when you’ve memorized it.`}
+          </p>
+          <button type="button" className="primary big" onClick={() => setPeekDisplay(null)}>
+            Done
+          </button>
+        </section>
+      )}
+
+      <Dialog open={inPower && !peekDisplay && flights.length === 0 && !awaitingOpponentPick}>
+        {inPower && !peekDisplay && !awaitingOpponentPick && (
+          <PowerView remote={remote} onChooseOpponentPeek={(wrap) => setOpponentPeekWrap({ fn: wrap })} />
         )}
       </Dialog>
 

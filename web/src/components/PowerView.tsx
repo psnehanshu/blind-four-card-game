@@ -8,6 +8,9 @@ import { playerNameFor } from "../util/playerName.js";
 
 interface Props {
   remote: RemoteEngine;
+  /** Called when the user chooses "Peek opponent" — defers card selection to
+   *  the in-game hand UI. The wrap argument handles Joker mimic packaging. */
+  onChooseOpponentPeek?: (wrap: (a: BasePowerAction) => PowerAction) => void;
 }
 
 type Stage =
@@ -21,7 +24,7 @@ const POWER_LABEL: Record<"10" | "J" | "Q" | "K", string> = {
   K: "Lock",
 };
 
-export function PowerView({ remote }: Props) {
+export function PowerView({ remote, onChooseOpponentPeek }: Props) {
   const { identity, visibleState, dispatch, lastError, displayNames } = remote;
   if (!identity || !visibleState) return null;
   const visible = visibleState;
@@ -82,10 +85,8 @@ export function PowerView({ remote }: Props) {
       </h3>
       {stage.rank === "10" && (
         <PeekForm
-          visible={visible}
-          playerId={playerId}
-          displayNames={displayNames}
-          onSubmit={(a) => submit(a, stage.wrap)}
+          onSubmitOwn={() => submit({ power: "peek", target: "own" }, stage.wrap)}
+          onChooseOpponent={() => onChooseOpponentPeek?.(stage.wrap)}
         />
       )}
       {stage.rank === "J" && (
@@ -109,58 +110,18 @@ export function PowerView({ remote }: Props) {
 
 // ────────────────────────────── Peek ──────────────────────────────
 
-function PeekForm({
-  visible,
-  playerId,
-  displayNames,
-  onSubmit,
-}: {
-  visible: VisibleGameState;
-  playerId: string;
-  displayNames: Record<string, string>;
-  onSubmit: (a: BasePowerAction & { power: "peek" }) => void;
-}) {
-  const [mode, setMode] = useState<"choose" | "opponent">("choose");
-  const [opponentId, setOpponentId] = useState<string | null>(null);
-  const opponents = visible.players.filter((p) => p.id !== playerId);
-
-  if (mode === "choose") {
-    return (
-      <div className="power-form">
-        <p className="muted">Peek your own four cards, or one opponent card.</p>
-        <div className="power-actions">
-          <button type="button" className="primary" onClick={() => onSubmit({ power: "peek", target: "own" })}>
-            Peek my hand
-          </button>
-          <button type="button" className="ghost" onClick={() => setMode("opponent")}>
-            Peek an opponent
-          </button>
-        </div>
-      </div>
-    );
-  }
-
+function PeekForm({ onSubmitOwn, onChooseOpponent }: { onSubmitOwn: () => void; onChooseOpponent: () => void }) {
   return (
     <div className="power-form">
-      <p className="muted">Choose an opponent, then tap a card to peek.</p>
-      <PlayerPicker
-        label="Opponent"
-        players={opponents}
-        displayNames={displayNames}
-        meId={playerId}
-        value={opponentId}
-        onChange={setOpponentId}
-      />
-      {opponentId && (
-        <CardSlotPicker
-          visible={visible}
-          targetPlayerId={opponentId}
-          onPick={(cardIndex) => onSubmit({ power: "peek", target: "opponent", opponentId, opponentCardIndex: cardIndex })}
-        />
-      )}
-      <button type="button" className="ghost small" onClick={() => setMode("choose")}>
-        Back
-      </button>
+      <p className="muted">Peek your own four cards, or tap any opponent card to peek it.</p>
+      <div className="power-actions">
+        <button type="button" className="primary" onClick={onSubmitOwn}>
+          Peek my hand
+        </button>
+        <button type="button" className="ghost" onClick={onChooseOpponent}>
+          Peek an opponent
+        </button>
+      </div>
     </div>
   );
 }

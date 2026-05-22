@@ -807,6 +807,21 @@ button.slot-btn.slot-actionable .card-stack {
   align-items: center;
 }
 
+/* Inline prompt shown below my-hand while own-peek is revealing cards in
+   place. No backdrop — the player needs to see their own hand. */
+.peek-in-hand-prompt {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  margin-top: 18px;
+  padding: 8px 12px;
+  background: rgba(245, 197, 66, 0.12);
+  border: 1px solid rgba(245, 197, 66, 0.4);
+  border-radius: 10px;
+}
+
 /* ───────── flight layer ───────── */
 
 .flight-layer {
