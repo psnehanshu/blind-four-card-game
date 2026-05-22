@@ -99,6 +99,7 @@ Rules:
 - only top discard drawable
 - discard draws are public
 - deck draws private until revealed/discarded
+- when the deck is empty, the discard pile (except its top card) is shuffled and becomes the new deck; the top discard card stays face-up so the most recent play remains visible. If the discard pile only has its top card, the deck is truly empty.
 
 ## Decision
 

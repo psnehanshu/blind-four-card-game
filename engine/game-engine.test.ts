@@ -386,32 +386,61 @@ describe("GameEngine — turn flow", () => {
     assert.equal(r2.error, undefined);
   });
 
-  it("deck draw is rejected when deck is empty", () => {
-    const e = startGame({ playerIds: ["a", "b"], seed: 1 });
+  it("deck draw is rejected only when both deck and recyclable discard are empty", () => {
+    // With refill enabled, deck-empty draws pull from the discard pile (minus
+    // the top). Only when the discard has nothing to recycle should the draw
+    // be rejected — force that exact state via the documented escape hatch.
+    const e = setup();
     const players = turnOrder(e);
     const p0 = players[0];
     assert.ok(p0);
+    const state = e.getState();
+    state.deck = [];
+    // Leave a single card on the discard pile — the top stays face-up and is
+    // not recycled, so there's nothing to refill the deck with.
+    state.discardPile.splice(0, state.discardPile.length, {
+      id: "stay",
+      suit: "spades",
+      rank: "5",
+      value: 5,
+    });
+    const r = e.processEvent(p0, "DRAW_CARD", { source: "deck" });
+    assert.match(r.error ?? "", /Deck is empty/);
+  });
 
-    // Deck is 54 - 8 = 46 cards. Draw until empty.
-    for (let i = 0; i < 46; i++) {
-      const currentPid = players[0];
-      assert.ok(currentPid);
-      const r = e.processEvent(currentPid, "DRAW_CARD", { source: "deck" });
-      if (r.error) break;
-      e.processEvent(currentPid, "DISCARD_DRAWN", undefined);
-      if (e.getValidEvents(currentPid).includes("USE_POWER")) {
-        e.processEvent(currentPid, "USE_POWER", {
-          power: "peek",
-          target: "own",
-        });
-      }
-      e.processEvent(currentPid, "END_TURN", undefined);
-    }
+  it("empty deck is refilled from the discard pile (minus the top) on the next deck draw", () => {
+    // Seed the engine with an empty deck and a stack of cards on discard, then
+    // assert the next deck draw triggers a recycle: top stays put, everything
+    // beneath becomes the new (shuffled) deck.
+    const e = setup();
+    const players = turnOrder(e);
+    const p0 = players[0];
+    assert.ok(p0);
+    const state = e.getState();
+    state.deck = [];
+    const top = { id: "top", suit: "hearts", rank: "9", value: 9 } as const;
+    const buried = [
+      { id: "b1", suit: "clubs", rank: "4", value: 4 } as const,
+      { id: "b2", suit: "diamonds", rank: "8", value: 0 } as const,
+      { id: "b3", suit: "spades", rank: "2", value: 2 } as const,
+    ];
+    state.discardPile.splice(0, state.discardPile.length, ...buried, top);
 
-    const firstPlayer = players[0];
-    assert.ok(firstPlayer);
-    const r = e.processEvent(firstPlayer, "DRAW_CARD", { source: "deck" });
-    assert.ok(r.error || e.getState().deck.length === 0);
+    const r = e.processEvent(p0, "DRAW_CARD", { source: "deck" });
+    assert.equal(r.error, undefined);
+    const after = e.getState();
+    // Top discard card is preserved; the drawn card came from the refill.
+    assert.equal(after.discardPile.length, 1);
+    assert.equal(after.discardPile[0]?.id, "top");
+    // Three buried cards became the new deck, one of them just got drawn off.
+    assert.equal(after.deck.length, buried.length - 1);
+    // The drawn card lives on engine state until REPLACE/DISCARD_DRAWN; it
+    // must be one of the originally-buried cards (any of the three is valid).
+    const drawnRank = e.getDrawnCard(p0)?.rank;
+    assert.ok(
+      buried.some((c) => c.rank === drawnRank),
+      `drawn rank ${drawnRank ?? "?"} should be one of the refilled cards`,
+    );
   });
 
   it("discard pile draw is rejected when discard pile is empty", () => {

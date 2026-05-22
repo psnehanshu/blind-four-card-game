@@ -335,7 +335,12 @@ export class GameEngine {
         if (player && player.hand.every((c) => c.locked)) {
           return "All your cards are locked — cannot draw from the discard pile";
         }
-      } else if (this.game.deck.length === 0) return "Deck is empty";
+      } else if (this.game.deck.length === 0) {
+        // Deck draws can still proceed if the discard pile has cards beneath
+        // its top (those get shuffled into a new deck in applyDraw); the top
+        // card stays face-up so the most recent play remains visible.
+        if (this.game.discardPile.length <= 1) return "Deck is empty";
+      }
     } else if (eventType === "REPLACE_CARD" || eventType === "DISCARD_DRAWN") {
       if (this.phase !== "decision") return "Must replace or discard drawn card";
       if (!this.drawnCard) return "No card drawn yet";
@@ -499,6 +504,15 @@ export class GameEngine {
       if (!card) throw new Error("Discard pile is empty");
       drawn = card;
     } else {
+      // Recycle: if the deck is empty but the discard pile has more than the
+      // top card, shuffle everything underneath the top into a fresh deck.
+      // The top stays in place so the most recent play remains visible.
+      if (this.game.deck.length === 0 && this.game.discardPile.length > 1) {
+        const top = this.game.discardPile.pop();
+        const refill = this.game.discardPile.splice(0);
+        this.game.deck = this.rng.shuffle(refill);
+        if (top) this.game.discardPile.push(top);
+      }
       const card = this.game.deck.pop();
       if (!card) throw new Error("Deck is empty");
       drawn = card;
