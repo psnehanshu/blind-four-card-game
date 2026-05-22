@@ -108,6 +108,11 @@ export function TurnView({ remote }: Props) {
   const [hiddenSlots, setHiddenSlots] = useState<Set<string>>(new Set());
   // Countdown displayed alongside the Call Showdown button (null = no window active).
   const [endCountdown, setEndCountdown] = useState<number | null>(null);
+  // True while a freshly discarded power card is being spotlighted on the
+  // discard pile. Holds the PowerView dialog closed so the player can register
+  // what they just discarded before the picker appears.
+  const [powerSpotlight, setPowerSpotlight] = useState(false);
+  const powerSpotlightArmedRef = useRef(false);
   const endTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const endIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   // dispatch is recreated each render; ref it so the auto-end effect stays stable.
@@ -348,6 +353,25 @@ export function TurnView({ remote }: Props) {
     setLockPickWrap({ fn: (a) => a });
   }, [inPowerNow, topRank, lockPickWrap, opponentPeekWrap, peekDisplay]);
 
+  // When the engine reports a power phase AND the discard pile has finished
+  // revealing its new top, give the player ~1.1s with the just-discarded card
+  // spotlighted before opening the PowerView dialog. Armed once per power
+  // phase; the !inPower branch disarms when the phase ends.
+  const spotlightReady = inPowerNow && !hideDiscardTopForFlight;
+  useEffect(() => {
+    if (!inPowerNow) {
+      powerSpotlightArmedRef.current = false;
+      setPowerSpotlight(false);
+      return;
+    }
+    if (!spotlightReady) return;
+    if (powerSpotlightArmedRef.current) return;
+    powerSpotlightArmedRef.current = true;
+    setPowerSpotlight(true);
+    const t = setTimeout(() => setPowerSpotlight(false), 1100);
+    return () => clearTimeout(t);
+  }, [inPowerNow, spotlightReady]);
+
   function callShowdown() {
     clearAutoEnd();
     send("CALL_SHOWDOWN", undefined);
@@ -572,7 +596,9 @@ export function TurnView({ remote }: Props) {
           </button>
         </div>
 
-        <div className={`pile${canDraw && visible.discardPile.length > 0 && !allMyCardsLocked ? " is-active" : ""}`}>
+        <div
+          className={`pile${canDraw && visible.discardPile.length > 0 && !allMyCardsLocked ? " is-active" : ""}${powerSpotlight ? " is-spotlight" : ""}`}
+        >
           <span className="pile-label">Discard ({visible.discardPile.length})</span>
           <button
             ref={discardRef}
@@ -678,7 +704,11 @@ export function TurnView({ remote }: Props) {
         </Hand>
       </section>
 
-      <Dialog open={inPower && !peekDisplay && flights.length === 0 && !awaitingOpponentPick && !awaitingLockPick}>
+      <Dialog
+        open={
+          inPower && !peekDisplay && flights.length === 0 && !awaitingOpponentPick && !awaitingLockPick && !powerSpotlight
+        }
+      >
         {inPower && !peekDisplay && !awaitingOpponentPick && !awaitingLockPick && (
           <ScalableContent>
             <PowerView
