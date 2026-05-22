@@ -70,8 +70,19 @@ function drawnCardHint(rank: Rank): string | null {
 }
 
 export function TurnView({ remote }: Props) {
-  const { identity, visibleState, validEvents, drawnCard, cue, displayNames, dispatch, lastError, peekResult, clearPeek } =
-    remote;
+  const {
+    identity,
+    visibleState,
+    validEvents,
+    drawnCard,
+    cue,
+    displayNames,
+    onlinePlayerIds,
+    dispatch,
+    lastError,
+    peekResult,
+    clearPeek,
+  } = remote;
   if (!identity || !visibleState) return null;
   const playerId = identity.playerId;
   const visible = visibleState;
@@ -522,7 +533,13 @@ export function TurnView({ remote }: Props) {
   return (
     <div className="screen screen--locked turn">
       <header className="turn-header">
-        <h2>Your turn</h2>
+        <h2>
+          <span
+            className={`presence-dot${onlinePlayerIds.has(playerId) ? " is-online" : " is-offline"}`}
+            aria-label={onlinePlayerIds.has(playerId) ? "Online" : "Offline"}
+          />
+          Your turn
+        </h2>
         <div className="turn-header-actions">
           {awaitingOpponentPick && (
             <div className="peek-chip">
@@ -589,7 +606,13 @@ export function TurnView({ remote }: Props) {
             );
             return (
               <div key={op.id} className="opponent">
-                <span className="opponent-name">{playerNameFor(op.id, playerId, displayNames, op.name)}</span>
+                <span className="opponent-name">
+                  <span
+                    className={`presence-dot${onlinePlayerIds.has(op.id) ? " is-online" : " is-offline"}`}
+                    aria-label={onlinePlayerIds.has(op.id) ? "Online" : "Offline"}
+                  />
+                  {playerNameFor(op.id, playerId, displayNames, op.name)}
+                </span>
                 <Hand className="hand small" shakeNonce={shuffleNonceFor(op.id)}>
                   {Array.from({ length: op.handSize }).map((_, i) => {
                     const marker = markers.get(i);

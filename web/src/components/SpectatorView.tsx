@@ -22,7 +22,7 @@ function rectCenter(el: HTMLElement | null): { x: number; y: number } | null {
 }
 
 export function SpectatorView({ remote }: Props) {
-  const { identity, visibleState, displayNames, cue } = remote;
+  const { identity, visibleState, displayNames, onlinePlayerIds, cue } = remote;
   const slotRefs = useRef<Map<string, HTMLElement | null>>(new Map());
   const deckRef = useRef<HTMLDivElement | null>(null);
   const discardRef = useRef<HTMLDivElement | null>(null);
@@ -185,7 +185,13 @@ export function SpectatorView({ remote }: Props) {
   return (
     <div className="screen screen--locked turn">
       <header className="turn-header">
-        <h2>Waiting on {currentName}…</h2>
+        <h2>
+          <span
+            className={`presence-dot${onlinePlayerIds.has(myId) ? " is-online" : " is-offline"}`}
+            aria-label={onlinePlayerIds.has(myId) ? "Online" : "Offline"}
+          />
+          Waiting on {currentName}…
+        </h2>
       </header>
 
       <AnimatePresence>
@@ -213,6 +219,10 @@ export function SpectatorView({ remote }: Props) {
             return (
               <div key={op.id} className={`opponent${op.id === currentPlayer?.id ? " is-current" : ""}`}>
                 <span className="opponent-name">
+                  <span
+                    className={`presence-dot${onlinePlayerIds.has(op.id) ? " is-online" : " is-offline"}`}
+                    aria-label={onlinePlayerIds.has(op.id) ? "Online" : "Offline"}
+                  />
                   {playerNameFor(op.id, myId, displayNames, op.name)}
                   {op.id === currentPlayer?.id && <span className="badge caller">TURN</span>}
                 </span>

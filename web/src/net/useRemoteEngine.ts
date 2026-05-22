@@ -42,6 +42,8 @@ export interface RemoteEngine {
   drawnCard: Card | null;
   winnerIds: string[];
   displayNames: Record<string, string>;
+  /** Set of playerIds currently bound to a live socket. Server-reported. */
+  onlinePlayerIds: Set<string>;
   peekResult: PeekResult | null;
   cue: AnimationCue;
   version: number;
@@ -73,6 +75,7 @@ export function useRemoteEngine(initial: InitialAction): RemoteEngine {
   const [drawnCard, setDrawnCard] = useState<Card | null>(null);
   const [winnerIds, setWinnerIds] = useState<string[]>([]);
   const [displayNames, setDisplayNames] = useState<Record<string, string>>({});
+  const [onlinePlayerIds, setOnlinePlayerIds] = useState<Set<string>>(() => new Set());
   const [peekResult, setPeekResult] = useState<PeekResult | null>(null);
   const [cue, setCue] = useState<AnimationCue>(null);
   const [version, bump] = useReducer((n: number) => n + 1, 0);
@@ -109,6 +112,7 @@ export function useRemoteEngine(initial: InitialAction): RemoteEngine {
       }
       if (msg.kind === "LOBBY") {
         setLobby({ gameId: msg.gameId, hostPlayerId: msg.hostPlayerId, players: msg.players });
+        setOnlinePlayerIds(new Set(msg.onlinePlayerIds));
         return;
       }
       if (msg.kind === "STATE") {
@@ -119,6 +123,7 @@ export function useRemoteEngine(initial: InitialAction): RemoteEngine {
         setValidEvents(msg.validEvents);
         setDrawnCard(msg.drawnCard);
         setDisplayNames(msg.displayNames);
+        setOnlinePlayerIds(new Set(msg.onlinePlayerIds));
         setWinnerIds(msg.winnerIds ?? []);
         bump();
         if (msg.peekResult) setPeekResult(msg.peekResult);
@@ -252,6 +257,7 @@ export function useRemoteEngine(initial: InitialAction): RemoteEngine {
     drawnCard,
     winnerIds,
     displayNames,
+    onlinePlayerIds,
     peekResult,
     cue,
     version,

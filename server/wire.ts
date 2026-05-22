@@ -38,6 +38,8 @@ export type ServerMsg =
       gameId: string;
       hostPlayerId: string;
       players: LobbyPlayer[];
+      /** PlayerIds of seats currently bound to a live socket. Server-managed. */
+      onlinePlayerIds: string[];
     }
   | {
       kind: "STATE";
@@ -52,6 +54,8 @@ export type ServerMsg =
       peekResult?: PeekResult;
       /** Display names indexed by playerId — server-managed, not in the engine. */
       displayNames: Record<string, string>;
+      /** PlayerIds of seats currently bound to a live socket. Server-managed. */
+      onlinePlayerIds: string[];
     }
   | { kind: "ERROR"; message: string };
 

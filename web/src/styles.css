@@ -607,6 +607,29 @@ button.slot-btn:hover:not(:disabled) {
   }
 }
 
+/* Tiny status dot shown next to a player's name. Green = socket connected,
+   grey = disconnected (server lost their socket). Inline-block so it sits
+   inline with names; vertical-align nudges it to optical center. */
+.presence-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 6px;
+  vertical-align: 1px;
+  flex-shrink: 0;
+}
+
+.presence-dot.is-online {
+  background: #4ade80;
+  box-shadow: 0 0 6px rgba(74, 222, 128, 0.7);
+}
+
+.presence-dot.is-offline {
+  background: #555;
+  box-shadow: none;
+}
+
 /* Faint cheatsheet strip on the table showing hand-values per rank. Low
    contrast and pointer-events:none so it doesn't compete with primary UI,
    but readable enough at a glance. 7=0 and JOKER=20 are highlighted since

@@ -78,6 +78,20 @@ function socketData(socket: Socket): SocketData {
   return socket.data;
 }
 
+/** PlayerIds whose sockets are currently joined to the game's room. The set
+ *  reflects live TCP/WebSocket presence — sockets that have disconnected are
+ *  already gone from the room by the time this is called. */
+async function onlinePlayerIds(io: Server, gameId: string): Promise<string[]> {
+  const sockets = await io.in(gameId).fetchSockets();
+  const ids = new Set<string>();
+  for (const s of sockets) {
+    if (isRecord(s.data) && typeof s.data.playerId === "string") {
+      ids.add(s.data.playerId);
+    }
+  }
+  return [...ids];
+}
+
 export function attachSocketHandlers(io: Server, store: Store, manager: GameManager): void {
   io.on("connection", (socket: Socket) => {
     // Ensure socket.data is our SocketData shape.
@@ -100,11 +114,26 @@ export function attachSocketHandlers(io: Server, store: Store, manager: GameMana
         } else if (msg.kind === "GAME_EVENT") {
           void handleGameEvent(socket, io, store, manager, msg);
         } else if (msg.kind === "REQUEST_STATE") {
-          handleRequestState(socket, store, manager, msg.gameId);
+          void handleRequestState(socket, io, store, manager, msg.gameId);
         }
       } catch (e) {
         const message = e instanceof Error ? e.message : String(e);
         send(socket, { kind: "ERROR", message });
+      }
+    });
+
+    // Disconnect: socket.io removes the socket from its rooms before this
+    // fires, so onlinePlayerIds() will already exclude this seat. Re-broadcast
+    // the appropriate room message so peers see the presence drop.
+    socket.on("disconnect", () => {
+      const data = socketData(socket);
+      if (!data.gameId) return;
+      const row = store.loadGameRow(data.gameId);
+      if (!row) return;
+      if (row.status === "lobby") {
+        void broadcastLobby(io, store, data.gameId);
+      } else {
+        void broadcastState(io, store, manager, data.gameId, [], undefined, undefined);
       }
     });
   });
@@ -120,7 +149,7 @@ async function handleCreateGame(socket: Socket, io: Server, store: Store, displa
   data.playerId = playerId;
   await socket.join(gameId);
   send(socket, { kind: "WELCOME", gameId, playerId, sessionToken: token, hostPlayerId: playerId });
-  broadcastLobby(io, store, gameId);
+  await broadcastLobby(io, store, gameId);
 }
 
 async function handleJoinGame(
@@ -152,11 +181,12 @@ async function handleJoinGame(
         hostPlayerId: row.hostPlayerId,
       });
       if (row.status === "lobby") {
-        broadcastLobby(io, store, msg.gameId);
+        await broadcastLobby(io, store, msg.gameId);
       } else {
-        // Token resume on a running game: refresh only the rejoiner. The rest
-        // of the room hasn't changed and doesn't need another STATE push.
-        sendStateTo(socket, store, manager, msg.gameId, resolved.playerId);
+        // Token resume on a running game: re-broadcast STATE to everyone so
+        // peers see the presence flip back to online for the rejoiner. The
+        // rejoiner gets a fresh snapshot in the same pass.
+        await broadcastState(io, store, manager, msg.gameId, [], undefined, undefined);
       }
       return;
     }
@@ -179,7 +209,7 @@ async function handleJoinGame(
   data.playerId = playerId;
   await socket.join(msg.gameId);
   send(socket, { kind: "WELCOME", gameId: msg.gameId, playerId, sessionToken: token, hostPlayerId: row.hostPlayerId });
-  broadcastLobby(io, store, msg.gameId);
+  await broadcastLobby(io, store, msg.gameId);
 }
 
 async function handleStartGame(
@@ -279,14 +309,21 @@ async function handleGameEvent(
   await broadcastState(io, store, manager, msg.gameId, result.events, result.peekResult, data.playerId);
 }
 
-function broadcastLobby(io: Server, store: Store, gameId: string): void {
+async function broadcastLobby(io: Server, store: Store, gameId: string): Promise<void> {
   const row = store.loadGameRow(gameId);
   if (!row) return;
   const players = row.playerIds.map((pid) => ({
     playerId: pid,
     displayName: row.displayNames[pid] ?? pid,
   }));
-  const msg: ServerMsg = { kind: "LOBBY", gameId, hostPlayerId: row.hostPlayerId, players };
+  const online = await onlinePlayerIds(io, gameId);
+  const msg: ServerMsg = {
+    kind: "LOBBY",
+    gameId,
+    hostPlayerId: row.hostPlayerId,
+    players,
+    onlinePlayerIds: online,
+  };
   io.to(gameId).emit(MSG_CHANNEL, msg);
 }
 
@@ -303,6 +340,11 @@ async function broadcastState(
   if (!row) return;
   const displayNames = row.displayNames;
   const sockets = await io.in(gameId).fetchSockets();
+  const online = new Set<string>();
+  for (const s of sockets) {
+    if (isRecord(s.data) && typeof s.data.playerId === "string") online.add(s.data.playerId);
+  }
+  const onlineList = [...online];
   for (const s of sockets) {
     const recipientPid = isRecord(s.data) && typeof s.data.playerId === "string" ? s.data.playerId : null;
     if (!recipientPid) continue;
@@ -321,6 +363,7 @@ async function broadcastState(
       drawnCard: snap.drawnCard,
       lastEvents: snap.lastEvents,
       displayNames,
+      onlinePlayerIds: onlineList,
       ...(snap.winnerIds ? { winnerIds: snap.winnerIds } : {}),
       ...(snap.peekResult ? { peekResult: snap.peekResult } : {}),
     };
@@ -333,11 +376,19 @@ async function broadcastState(
  * resume / explicit REQUEST_STATE — no `lastEvents` so the client doesn't
  * replay animations or sounds for actions it already processed.
  */
-function sendStateTo(socket: Socket, store: Store, manager: GameManager, gameId: string, playerId: string): void {
+async function sendStateTo(
+  socket: Socket,
+  io: Server,
+  store: Store,
+  manager: GameManager,
+  gameId: string,
+  playerId: string,
+): Promise<void> {
   const row = store.loadGameRow(gameId);
   if (!row) return;
   const snap = manager.snapshotFor(gameId, playerId, [], undefined);
   if (!snap) return;
+  const online = await onlinePlayerIds(io, gameId);
   const msg: ServerMsg = {
     kind: "STATE",
     gameId,
@@ -346,6 +397,7 @@ function sendStateTo(socket: Socket, store: Store, manager: GameManager, gameId:
     drawnCard: snap.drawnCard,
     lastEvents: [],
     displayNames: row.displayNames,
+    onlinePlayerIds: online,
     ...(snap.winnerIds ? { winnerIds: snap.winnerIds } : {}),
   };
   send(socket, msg);
@@ -356,7 +408,13 @@ function sendStateTo(socket: Socket, store: Store, manager: GameManager, gameId:
  * we don't recognize (e.g., a REQUEST_STATE that races ahead of the
  * post-reconnect JOIN_GAME); the JOIN itself will deliver a fresh snapshot.
  */
-function handleRequestState(socket: Socket, store: Store, manager: GameManager, gameId: string): void {
+async function handleRequestState(
+  socket: Socket,
+  io: Server,
+  store: Store,
+  manager: GameManager,
+  gameId: string,
+): Promise<void> {
   const data = socketData(socket);
   if (data.gameId !== gameId || !data.playerId) return;
   const row = store.loadGameRow(gameId);
@@ -369,8 +427,15 @@ function handleRequestState(socket: Socket, store: Store, manager: GameManager, 
       playerId: pid,
       displayName: row.displayNames[pid] ?? pid,
     }));
-    send(socket, { kind: "LOBBY", gameId, hostPlayerId: row.hostPlayerId, players });
+    const online = await onlinePlayerIds(io, gameId);
+    send(socket, {
+      kind: "LOBBY",
+      gameId,
+      hostPlayerId: row.hostPlayerId,
+      players,
+      onlinePlayerIds: online,
+    });
     return;
   }
-  sendStateTo(socket, store, manager, gameId, data.playerId);
+  await sendStateTo(socket, io, store, manager, gameId, data.playerId);
 }
