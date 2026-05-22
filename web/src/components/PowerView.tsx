@@ -11,6 +11,9 @@ interface Props {
   /** Called when the user chooses "Peek opponent" — defers card selection to
    *  the in-game hand UI. The wrap argument handles Joker mimic packaging. */
   onChooseOpponentPeek?: (wrap: (a: BasePowerAction) => PowerAction) => void;
+  /** Called when the user opts to lock — defers target selection to the
+   *  in-game hand UI (every unlocked card across all hands glows + is clickable). */
+  onChooseLock?: (wrap: (a: BasePowerAction) => PowerAction) => void;
 }
 
 type Stage =
@@ -24,7 +27,7 @@ const POWER_LABEL: Record<"10" | "J" | "Q" | "K", string> = {
   K: "Lock",
 };
 
-export function PowerView({ remote, onChooseOpponentPeek }: Props) {
+export function PowerView({ remote, onChooseOpponentPeek, onChooseLock }: Props) {
   const { identity, visibleState, dispatch, lastError, displayNames } = remote;
   if (!identity || !visibleState) return null;
   const visible = visibleState;
@@ -56,19 +59,22 @@ export function PowerView({ remote, onChooseOpponentPeek }: Props) {
               key={r}
               type="button"
               className="primary"
-              onClick={() =>
-                setStage({
-                  kind: "power",
-                  rank: r,
-                  wrap: (a) => {
-                    if (r === "10" && a.power === "peek") return { power: "joker", mimicRank: r, action: a };
-                    if (r === "J" && a.power === "shuffle") return { power: "joker", mimicRank: r, action: a };
-                    if (r === "Q" && a.power === "swap") return { power: "joker", mimicRank: r, action: a };
-                    if (r === "K" && a.power === "lock") return { power: "joker", mimicRank: r, action: a };
-                    throw new Error("Joker wrap mismatch");
-                  },
-                })
-              }
+              onClick={() => {
+                const wrap = (a: BasePowerAction): PowerAction => {
+                  if (r === "10" && a.power === "peek") return { power: "joker", mimicRank: r, action: a };
+                  if (r === "J" && a.power === "shuffle") return { power: "joker", mimicRank: r, action: a };
+                  if (r === "Q" && a.power === "swap") return { power: "joker", mimicRank: r, action: a };
+                  if (r === "K" && a.power === "lock") return { power: "joker", mimicRank: r, action: a };
+                  throw new Error("Joker wrap mismatch");
+                };
+                // Lock skips the dialog entirely — defer immediately to the
+                // in-game picker via the same path direct-K uses.
+                if (r === "K") {
+                  onChooseLock?.(wrap);
+                  return;
+                }
+                setStage({ kind: "power", rank: r, wrap });
+              }}
             >
               {r} — {POWER_LABEL[r]}
             </button>
@@ -100,9 +106,8 @@ export function PowerView({ remote, onChooseOpponentPeek }: Props) {
       {stage.rank === "Q" && (
         <SwapForm visible={visible} displayNames={displayNames} meId={playerId} onSubmit={(a) => submit(a, stage.wrap)} />
       )}
-      {stage.rank === "K" && (
-        <LockForm visible={visible} displayNames={displayNames} meId={playerId} onSubmit={(a) => submit(a, stage.wrap)} />
-      )}
+      {/* K is handled in TurnView (direct case) or the Joker picker above
+          (Joker-K case) — no dialog branch needed. */}
       {lastError && <div className="error">{lastError}</div>}
     </section>
   );
@@ -275,43 +280,6 @@ function SwapSide({
           targetPlayerId={value.playerId}
           selectedIndex={value.cardIndex}
           onPick={(cardIndex) => onChange({ ...value, cardIndex })}
-          disableLocked
-        />
-      )}
-    </div>
-  );
-}
-
-// ────────────────────────────── Lock ──────────────────────────────
-
-function LockForm({
-  visible,
-  displayNames,
-  meId,
-  onSubmit,
-}: {
-  visible: VisibleGameState;
-  displayNames: Record<string, string>;
-  meId: string;
-  onSubmit: (a: BasePowerAction & { power: "lock" }) => void;
-}) {
-  const [targetPlayerId, setTargetPlayerId] = useState<string | null>(null);
-  return (
-    <div className="power-form">
-      <p className="muted">Lock a card. Locked cards cannot be replaced or swapped.</p>
-      <PlayerPicker
-        label="Target"
-        players={visible.players}
-        displayNames={displayNames}
-        meId={meId}
-        value={targetPlayerId}
-        onChange={setTargetPlayerId}
-      />
-      {targetPlayerId && (
-        <CardSlotPicker
-          visible={visible}
-          targetPlayerId={targetPlayerId}
-          onPick={(cardIndex) => onSubmit({ power: "lock", targetPlayerId, cardIndex })}
           disableLocked
         />
       )}

@@ -26,7 +26,7 @@ type PeekDisplay =
   | { kind: "own"; cards: PeekResult["cards"] }
   | { kind: "opponent"; playerId: string; playerName: string; cards: PeekResult["cards"] };
 
-type PeekWrap = (a: BasePowerAction) => PowerAction;
+type PowerWrap = (a: BasePowerAction) => PowerAction;
 
 const DRAWN_CLOSEUP_SCALE = 2.6;
 // After entering showdown_eligible, give the player a window before auto-ending.
@@ -55,7 +55,9 @@ export function TurnView({ remote }: Props) {
   // When set, the player has opted to peek an opponent and we're awaiting a
   // card click in the opponents' hands. Holds the Joker-wrap function so the
   // eventual USE_POWER dispatch packages correctly for both raw 10 and Joker.
-  const [opponentPeekWrap, setOpponentPeekWrap] = useState<{ fn: PeekWrap } | null>(null);
+  const [opponentPeekWrap, setOpponentPeekWrap] = useState<{ fn: PowerWrap } | null>(null);
+  // Same shape, for the lock power — awaits a click on any unlocked card.
+  const [lockPickWrap, setLockPickWrap] = useState<{ fn: PowerWrap } | null>(null);
 
   // ───── Flight refs + state ─────
   const deckRef = useRef<HTMLButtonElement | null>(null);
@@ -268,6 +270,35 @@ export function TurnView({ remote }: Props) {
     dispatch("USE_POWER", wrap({ power: "peek", target: "opponent", opponentId, opponentCardIndex: cardIndex }));
   }
 
+  function pickLockTarget(targetPlayerId: string, cardIndex: number) {
+    const wrap = lockPickWrap?.fn;
+    if (!wrap) return;
+    setLockPickWrap(null);
+    dispatch("USE_POWER", wrap({ power: "lock", targetPlayerId, cardIndex }));
+  }
+
+  // Direct K on discard: skip the PowerView dialog entirely and go straight
+  // to the in-hand picker. The Joker→K path is handled inside PowerView's
+  // rank picker, which fires onChooseLock with the Joker wrap.
+  const inPowerNow = validEvents.includes("USE_POWER");
+  const topRank = visible.discardPile.at(-1)?.rank;
+  // Arm once per power phase. Without this guard, picking a card clears
+  // lockPickWrap while inPower is still true (the STATE response hasn't
+  // arrived), and this effect would re-fire and re-arm lock-pick — trapping
+  // the user instead of letting the turn proceed.
+  const lockArmedRef = useRef(false);
+  useEffect(() => {
+    if (!inPowerNow) {
+      lockArmedRef.current = false;
+      return;
+    }
+    if (lockArmedRef.current) return;
+    if (lockPickWrap || opponentPeekWrap || peekDisplay) return;
+    if (topRank !== "K") return;
+    lockArmedRef.current = true;
+    setLockPickWrap({ fn: (a) => a });
+  }, [inPowerNow, topRank, lockPickWrap, opponentPeekWrap, peekDisplay]);
+
   function callShowdown() {
     clearAutoEnd();
     send("CALL_SHOWDOWN", undefined);
@@ -289,7 +320,7 @@ export function TurnView({ remote }: Props) {
   // Auto-end the turn once we enter showdown_eligible. Waits 5s if showdown is a
   // legal call (so the player can decide), else just buffers long enough for
   // discard/power animations to land. Clicking Call Showdown cancels the timer.
-  const peekOpen = !!peekDisplay || !!opponentPeekWrap;
+  const peekOpen = !!peekDisplay || !!opponentPeekWrap || !!lockPickWrap;
   useEffect(() => {
     if (!canEnd || inPower || peekOpen) {
       clearAutoEnd();
@@ -334,6 +365,7 @@ export function TurnView({ remote }: Props) {
     for (const c of peekDisplay.cards) opponentPeekMap.set(`${peekDisplay.playerId}-${c.index}`, c.card);
   }
   const awaitingOpponentPick = !!opponentPeekWrap;
+  const awaitingLockPick = !!lockPickWrap;
 
   return (
     <div className="screen turn">
@@ -404,6 +436,19 @@ export function TurnView({ remote }: Props) {
                           type="button"
                           className={hidden ? "slot-btn slot-actionable slot-hidden" : "slot-btn slot-actionable"}
                           onClick={() => pickOpponentPeek(op.id, i)}
+                        >
+                          {inner}
+                        </button>
+                      );
+                    }
+                    if (awaitingLockPick && !locked) {
+                      return (
+                        <button
+                          key={i}
+                          ref={setSlotRef(op.id, i)}
+                          type="button"
+                          className={hidden ? "slot-btn slot-actionable slot-hidden" : "slot-btn slot-actionable"}
+                          onClick={() => pickLockTarget(op.id, i)}
                         >
                           {inner}
                         </button>
@@ -517,6 +562,19 @@ export function TurnView({ remote }: Props) {
                 </button>
               );
             }
+            if (awaitingLockPick && !locked) {
+              return (
+                <button
+                  key={i}
+                  ref={setSlotRef(playerId, i)}
+                  type="button"
+                  className={hidden ? "slot-btn slot-actionable slot-hidden" : "slot-btn slot-actionable"}
+                  onClick={() => pickLockTarget(playerId, i)}
+                >
+                  {inner}
+                </button>
+              );
+            }
             return (
               <div key={i} ref={setSlotRef(playerId, i)} className={hidden ? "slot-hidden" : undefined}>
                 {inner}
@@ -535,6 +593,12 @@ export function TurnView({ remote }: Props) {
         </section>
       )}
 
+      {awaitingLockPick && (
+        <section className="peek-in-hand-prompt">
+          <p className="muted small-note">Tap any unlocked card — yours or an opponent&rsquo;s — to lock it.</p>
+        </section>
+      )}
+
       {peekDisplay && (
         <section className="peek-in-hand-prompt">
           <p className="muted small-note">
@@ -548,9 +612,13 @@ export function TurnView({ remote }: Props) {
         </section>
       )}
 
-      <Dialog open={inPower && !peekDisplay && flights.length === 0 && !awaitingOpponentPick}>
-        {inPower && !peekDisplay && !awaitingOpponentPick && (
-          <PowerView remote={remote} onChooseOpponentPeek={(wrap) => setOpponentPeekWrap({ fn: wrap })} />
+      <Dialog open={inPower && !peekDisplay && flights.length === 0 && !awaitingOpponentPick && !awaitingLockPick}>
+        {inPower && !peekDisplay && !awaitingOpponentPick && !awaitingLockPick && (
+          <PowerView
+            remote={remote}
+            onChooseOpponentPeek={(wrap) => setOpponentPeekWrap({ fn: wrap })}
+            onChooseLock={(wrap) => setLockPickWrap({ fn: wrap })}
+          />
         )}
       </Dialog>
 
