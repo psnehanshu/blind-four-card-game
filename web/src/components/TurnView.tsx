@@ -108,6 +108,8 @@ export function TurnView({ remote }: Props) {
   const [hiddenSlots, setHiddenSlots] = useState<Set<string>>(new Set());
   // Countdown displayed alongside the Call Showdown button (null = no window active).
   const [endCountdown, setEndCountdown] = useState<number | null>(null);
+  // Countdown shown on the "Done" button after a peek; auto-dismisses when 0.
+  const [peekCountdown, setPeekCountdown] = useState<number | null>(null);
   // True while a freshly discarded power card is being spotlighted on the
   // discard pile. Holds the PowerView dialog closed so the player can register
   // what they just discarded before the picker appears.
@@ -301,6 +303,26 @@ export function TurnView({ remote }: Props) {
     clearPeek();
   }, [peekResult, visible.players, displayNames, clearPeek, playerId]);
 
+  // Auto-dismiss the peek display after 5s so the turn proceeds even if the
+  // player doesn't tap Done. Countdown re-armed whenever a new peek arrives.
+  useEffect(() => {
+    if (!peekDisplay) {
+      setPeekCountdown(null);
+      return;
+    }
+    const deadline = Date.now() + 5000;
+    setPeekCountdown(5);
+    const interval = setInterval(() => {
+      const remaining = Math.max(0, deadline - Date.now());
+      setPeekCountdown(Math.ceil(remaining / 1000));
+    }, 200);
+    const timeout = setTimeout(() => setPeekDisplay(null), 5000);
+    return () => {
+      clearInterval(interval);
+      clearTimeout(timeout);
+    };
+  }, [peekDisplay]);
+
   function pickOpponentPeek(opponentId: string, cardIndex: number) {
     if (dispatchedRef.current) return;
     const wrap = opponentPeekWrap?.fn;
@@ -467,7 +489,7 @@ export function TurnView({ remote }: Props) {
                 {peekDisplay.kind === "own" ? "Memorize your cards" : `Peeking ${peekDisplay.playerName}`}
               </span>
               <button type="button" className="primary small" onClick={() => setPeekDisplay(null)}>
-                Done
+                Done{peekCountdown !== null ? ` (${peekCountdown})` : ""}
               </button>
             </div>
           )}
