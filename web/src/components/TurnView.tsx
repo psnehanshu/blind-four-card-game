@@ -13,6 +13,7 @@ import { ShuffleSlot } from "./ShuffleSlot.js";
 import { tiltForSlot } from "../util/rand.js";
 import { playerNameFor } from "../util/playerName.js";
 import { playPeek, playShowdown, playYourTurn } from "../audio/sound.js";
+import { isPowerCard } from "../../../engine/cards.js";
 
 interface PeekDisplay {
   playerName: string;
@@ -411,7 +412,7 @@ export function TurnView({ remote }: Props) {
                 <span className="drawn-closeup-caption">You drew</span>
                 {canDiscardDrawn && (
                   <button type="button" className="primary small" onClick={discardDrawn}>
-                    Discard this card
+                    {drawn && isPowerCard(drawn.rank) ? "Use power" : "Discard this card"}
                   </button>
                 )}
                 {canReplace && !canDiscardDrawn && (
