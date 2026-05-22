@@ -7,6 +7,7 @@ import { DeckStack, DiscardStack } from "./Pile.js";
 import { Hand } from "./Hand.js";
 import { ShuffleSlot } from "./ShuffleSlot.js";
 import { FlightLayer, type Flight } from "./FlightLayer.js";
+import { Cheatsheet } from "./Cheatsheet.js";
 import { tiltForSlot } from "../util/rand.js";
 import { playerNameFor } from "../util/playerName.js";
 
@@ -258,6 +259,7 @@ export function SpectatorView({ remote }: Props) {
           </div>
         </div>
         <div className="pile drawn placeholder-slot" aria-hidden="true" />
+        <Cheatsheet />
       </section>
 
       <section className="my-hand">

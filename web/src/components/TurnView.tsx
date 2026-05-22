@@ -14,6 +14,7 @@ import { CardView } from "./CardView.js";
 import { PowerView } from "./PowerView.js";
 import { Dialog } from "./Dialog.js";
 import { ScalableContent } from "./ScalableContent.js";
+import { Cheatsheet } from "./Cheatsheet.js";
 import { DeckStack, DiscardStack } from "./Pile.js";
 import { PeekCardFlip } from "./PeekCardFlip.js";
 import { FlightLayer, type Flight } from "./FlightLayer.js";
@@ -687,6 +688,7 @@ export function TurnView({ remote }: Props) {
             <DiscardStack cards={renderedDiscardPile} />
           </button>
         </div>
+        <Cheatsheet />
       </section>
 
       <AnimatePresence>
