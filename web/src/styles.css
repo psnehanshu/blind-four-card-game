@@ -280,11 +280,12 @@ button.slot-btn:hover:not(:disabled) {
 }
 
 .card-hidden {
-  background-color: var(--card-back);
-  background-image:
-    repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.06) 0 1px, transparent 1px 6px),
-    repeating-linear-gradient(-45deg, rgba(255, 255, 255, 0.06) 0 1px, transparent 1px 6px);
-  color: rgba(255, 255, 255, 0.3);
+  background-color: #0b0b0e;
+  background-image: url("/cards/card_back.png");
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  color: transparent;
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
@@ -634,16 +635,17 @@ button.slot-btn.slot-actionable .card-stack {
   justify-content: center;
 }
 
+/* Edge of a card peeking out from under the top of the deck. Aged-paper tone
+   so the cream sliver doesn't fight the dark B4 back graphic; only the right
+   and bottom edges are visible thanks to the depth offset. */
 .pile-shadow {
   position: absolute;
   width: 70px;
   height: 100px;
-  background: var(--card-back);
+  background: linear-gradient(180deg, #cdbf9d 0%, #a89a7a 100%);
+  border: 1px solid rgba(0, 0, 0, 0.55);
   border-radius: 10px;
-  box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.04) inset,
-    0 -1px 0 rgba(0, 0, 0, 0.3) inset,
-    0 2px 3px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
 }
 
 .pile-top,

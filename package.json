@@ -10,7 +10,9 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "sanity": "npm run typecheck && npm run lint && npm run format:check && npm test",
-    "server:dev": "tsx watch server/index.ts"
+    "server:dev": "tsx watch server/index.ts",
+    "web:dev": "npm --prefix web run dev",
+    "dev": "trap 'kill 0' SIGINT EXIT; npm run server:dev & npm run web:dev"
   },
   "dependencies": {
     "better-sqlite3": "^11.7.0",

@@ -3,12 +3,12 @@ import { CardView } from "./CardView.js";
 import { seededRange } from "../util/rand.js";
 
 const MAX_DECK_DEPTH = 6;
-const DEPTH_OFFSET = 2; // px per layer
+const DEPTH_OFFSET = 1; // px per layer — subtle paper-edge sliver, not a fan
 const MAX_DISCARD_VISIBLE = 5;
 
 function deckDepth(size: number): number {
   if (size <= 0) return 0;
-  return Math.min(MAX_DECK_DEPTH, 1 + Math.floor(size / 10));
+  return Math.min(MAX_DECK_DEPTH, 1 + Math.floor(size / 8));
 }
 
 /**
