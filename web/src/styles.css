@@ -15,6 +15,30 @@
   --card-back-pattern: #2a4ca0;
   --error: #ff8a8a;
   --shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+
+  /* Responsive card dimensions — every .card-sm/md/lg below pulls from these.
+     clamp() gives a floor (so cards stay tappable on tiny screens) and a
+     ceiling (so they don't bloat on huge ones), with vw-driven scaling in
+     between for portrait phones. Drawn-closeup and pile-stack derive from
+     these too, so the whole table shrinks together. */
+  --card-w-sm: clamp(36px, 11vw, 44px);
+  --card-h-sm: clamp(52px, 16vw, 64px);
+  --card-w-md: clamp(54px, 16vw, 70px);
+  --card-h-md: clamp(76px, 23vw, 100px);
+  --card-w-lg: clamp(72px, 22vw, 90px);
+  --card-h-lg: clamp(104px, 32vw, 128px);
+  --card-font-sm: clamp(11px, 3vw, 14px);
+  --card-font-md: clamp(16px, 4.5vw, 22px);
+  --card-font-lg: clamp(20px, 6vw, 28px);
+
+  /* Drawn-card "held to face" close-up: 2.6× the held card size, sized via
+     CSS so it scales with --card-{w,h}-md. The inner card uses the same
+     --card-w/h-md and transform: scale(2.6) — TurnView wires the scale
+     factor inline; container math here must match. */
+  --drawn-closeup-scale: 2.6;
+  --drawn-closeup-w: calc(var(--card-w-md) * var(--drawn-closeup-scale));
+  --drawn-closeup-h: calc(var(--card-h-md) * var(--drawn-closeup-scale));
+
   font-family:
     system-ui,
     -apple-system,
@@ -77,6 +101,46 @@ body {
   gap: 20px;
   max-width: 900px;
   margin: 0 auto;
+}
+
+/* Viewport-locked variant used by in-game screens (TurnView, SpectatorView).
+   The screen is the table: it fills the viewport exactly (100dvh accounts
+   for collapsing mobile address bars) and never scrolls. The center pile
+   row absorbs leftover vertical space so opponents stay at the top and the
+   hand stays at the bottom; card sizes (CSS vars above) and the dialog
+   (ScalableContent) shrink to make everything fit. */
+.screen.screen--locked {
+  min-height: 0;
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
+  padding: calc(clamp(8px, 1.6dvh, 24px) + env(safe-area-inset-top)) calc(12px + env(safe-area-inset-right))
+    calc(clamp(8px, 1.6dvh, 32px) + env(safe-area-inset-bottom)) calc(12px + env(safe-area-inset-left));
+  gap: clamp(6px, 1.4dvh, 18px);
+}
+
+.screen.screen--locked > * {
+  min-height: 0;
+  flex-shrink: 0;
+}
+
+.screen.screen--locked .center-row {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.screen.screen--locked .opponents,
+.screen.screen--locked .my-hand {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(2px, 0.6dvh, 8px);
+}
+
+.screen.screen--locked .opponents h3,
+.screen.screen--locked .my-hand h3 {
+  margin: 0;
+  font-size: clamp(12px, 1.6dvh, 15px);
 }
 
 input,
@@ -258,21 +322,21 @@ button.slot-btn:hover:not(:disabled) {
 }
 
 .card-sm {
-  width: 44px;
-  height: 64px;
-  font-size: 14px;
+  width: var(--card-w-sm);
+  height: var(--card-h-sm);
+  font-size: var(--card-font-sm);
 }
 
 .card-md {
-  width: 70px;
-  height: 100px;
-  font-size: 22px;
+  width: var(--card-w-md);
+  height: var(--card-h-md);
+  font-size: var(--card-font-md);
 }
 
 .card-lg {
-  width: 90px;
-  height: 128px;
-  font-size: 28px;
+  width: var(--card-w-lg);
+  height: var(--card-h-lg);
+  font-size: var(--card-font-lg);
 }
 
 .card-red {
@@ -557,12 +621,12 @@ button.slot-btn.slot-actionable .card-stack {
 
 .drawn-closeup-card {
   /* Reserve layout space equal to the scaled card so the button below sits
-     clear of it visually AND in hit-testing. (size="md" is 70×100; container
-     dimensions must match DRAWN_CLOSEUP_SCALE × 70×100 in TurnView.) Scaling
-     happens on the inner wrapper, sized to the un-scaled card, so transformed
-     visual extent === container layout. */
-  width: 182px;
-  height: 260px;
+     clear of it visually AND in hit-testing. The container is sized to
+     --drawn-closeup-{w,h} (= --card-{w,h}-md × --drawn-closeup-scale) so the
+     box always matches the inner transform output. Both shrink together via
+     CSS variables on small viewports. */
+  width: var(--drawn-closeup-w);
+  height: var(--drawn-closeup-h);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -571,8 +635,8 @@ button.slot-btn.slot-actionable .card-stack {
 }
 
 .drawn-closeup-scale {
-  width: 70px;
-  height: 100px;
+  width: var(--card-w-md);
+  height: var(--card-h-md);
   transform-origin: 50% 50%;
 }
 
@@ -626,10 +690,10 @@ button.slot-btn.slot-actionable .card-stack {
 
 .pile-stack {
   position: relative;
-  width: 84px;
-  /* card-md width (70) + room for stack offset / rotation */
-  height: 114px;
-  /* card-md height (100) + offset */
+  width: calc(var(--card-w-md) + 14px);
+  /* card-md width + room for stack offset / rotation */
+  height: calc(var(--card-h-md) + 14px);
+  /* card-md height + offset */
   display: flex;
   align-items: center;
   justify-content: center;
@@ -640,8 +704,8 @@ button.slot-btn.slot-actionable .card-stack {
    and bottom edges are visible thanks to the depth offset. */
 .pile-shadow {
   position: absolute;
-  width: 70px;
-  height: 100px;
+  width: var(--card-w-md);
+  height: var(--card-h-md);
   background: linear-gradient(180deg, #cdbf9d 0%, #a89a7a 100%);
   border: 1px solid rgba(0, 0, 0, 0.55);
   border-radius: 10px;
@@ -653,8 +717,8 @@ button.slot-btn.slot-actionable .card-stack {
   position: absolute;
   top: 0;
   left: 0;
-  width: 70px;
-  height: 100px;
+  width: var(--card-w-md);
+  height: var(--card-h-md);
 }
 
 .pile-card .card {
@@ -664,8 +728,8 @@ button.slot-btn.slot-actionable .card-stack {
 }
 
 .pile-empty {
-  width: 70px;
-  height: 100px;
+  width: var(--card-w-md);
+  height: var(--card-h-md);
   border: 1px dashed var(--ghost-border);
   border-radius: 10px;
   display: flex;
@@ -681,6 +745,38 @@ button.slot-btn.slot-actionable .card-stack {
   display: flex;
   gap: 12px;
   justify-content: center;
+}
+
+/* Inside the viewport-locked screen, card slots and action buttons must stay
+   tappable even when card variables shrink to their floor. .slot-btn wraps a
+   CardView so its size follows the card; the min-height kicks in only at
+   extreme breakpoints. .end-actions wraps so a wide row never causes
+   horizontal overflow. */
+.screen--locked .primary,
+.screen--locked .ghost,
+.screen--locked .slot-btn {
+  min-height: 44px;
+}
+
+/* Explicitly-small buttons (e.g. the showdown chip in the header) opt out of
+   the locked-screen tap-target floor; they're secondary actions adjacent to
+   bigger controls and shrinking them is the whole point of .small. */
+.screen--locked .primary.small,
+.screen--locked .ghost.small {
+  min-height: 0;
+}
+
+.screen--locked .end-actions {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* Top-right showdown chip inside .turn-header. Compact enough not to crowd
+   the "Your turn" title; the countdown is still legible. */
+.showdown-btn {
+  white-space: nowrap;
+  font-size: 12px;
+  padding: 6px 10px;
 }
 
 .placeholder {
@@ -701,6 +797,10 @@ button.slot-btn.slot-actionable .card-stack {
   background: #1a2028;
   color: var(--fg);
   max-width: min(720px, 92vw);
+  /* Cap to viewport — ScalableContent inside scales down first and falls
+     back to vertical scroll only when scaling would push tap targets below
+     ~44px. */
+  max-height: 92dvh;
   width: 100%;
   box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55);
 }

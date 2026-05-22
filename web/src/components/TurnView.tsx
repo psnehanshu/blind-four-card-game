@@ -12,6 +12,7 @@ import type { RemoteEngine } from "../net/useRemoteEngine.js";
 import { CardView } from "./CardView.js";
 import { PowerView } from "./PowerView.js";
 import { Dialog } from "./Dialog.js";
+import { ScalableContent } from "./ScalableContent.js";
 import { DeckStack, DiscardStack } from "./Pile.js";
 import { PeekCardFlip } from "./PeekCardFlip.js";
 import { FlightLayer, type Flight } from "./FlightLayer.js";
@@ -396,9 +397,14 @@ export function TurnView({ remote }: Props) {
   const awaitingLockPick = !!lockPickWrap;
 
   return (
-    <div className="screen turn">
+    <div className="screen screen--locked turn">
       <header className="turn-header">
         <h2>Your turn</h2>
+        {canShowdown && endCountdown !== null && (
+          <button type="button" className="primary small showdown-btn" onClick={callShowdown}>
+            Showdown ({endCountdown})
+          </button>
+        )}
       </header>
 
       <AnimatePresence>
@@ -652,21 +658,15 @@ export function TurnView({ remote }: Props) {
 
       <Dialog open={inPower && !peekDisplay && flights.length === 0 && !awaitingOpponentPick && !awaitingLockPick}>
         {inPower && !peekDisplay && !awaitingOpponentPick && !awaitingLockPick && (
-          <PowerView
-            remote={remote}
-            onChooseOpponentPeek={(wrap) => setOpponentPeekWrap({ fn: wrap })}
-            onChooseLock={(wrap) => setLockPickWrap({ fn: wrap })}
-          />
+          <ScalableContent>
+            <PowerView
+              remote={remote}
+              onChooseOpponentPeek={(wrap) => setOpponentPeekWrap({ fn: wrap })}
+              onChooseLock={(wrap) => setLockPickWrap({ fn: wrap })}
+            />
+          </ScalableContent>
         )}
       </Dialog>
-
-      {canShowdown && endCountdown !== null && (
-        <section className="end-actions">
-          <button type="button" className="primary big" onClick={callShowdown}>
-            Call showdown ({endCountdown})
-          </button>
-        </section>
-      )}
 
       {lastError && <div className="error">{lastError}</div>}
 

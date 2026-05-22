@@ -182,7 +182,7 @@ export function SpectatorView({ remote }: Props) {
   const others = visible.players.filter((p) => p.id !== myId);
 
   return (
-    <div className="screen turn">
+    <div className="screen screen--locked turn">
       <header className="turn-header">
         <h2>Waiting on {currentName}…</h2>
       </header>
