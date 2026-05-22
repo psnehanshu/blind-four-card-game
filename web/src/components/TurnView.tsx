@@ -21,7 +21,7 @@ import { Hand } from "./Hand.js";
 import { ShuffleSlot } from "./ShuffleSlot.js";
 import { tiltForSlot } from "../util/rand.js";
 import { playerNameFor } from "../util/playerName.js";
-import { playPeek, playShowdown, playYourTurn } from "../audio/sound.js";
+import { playChooseLock, playPeek, playShowdown, playYourTurn } from "../audio/sound.js";
 import { isPowerCard } from "../../../engine/cards.js";
 
 type PeekDisplay =
@@ -393,6 +393,36 @@ export function TurnView({ remote }: Props) {
     const t = setTimeout(() => setPowerSpotlight(false), 1100);
     return () => clearTimeout(t);
   }, [inPowerNow, spotlightReady]);
+
+  // Nag the player to pick a lock target if they sit on the picker. The
+  // gap between prompts shrinks with each repetition (5s → 4s → 3.5s → 3s
+  // → 2.5s → 2s floor) and is measured from when the previous clip *ends*,
+  // so the audio is never cut off by the next play.
+  useEffect(() => {
+    if (!lockPickWrap) return;
+    const gaps = [5000, 4000, 3500, 3000, 2500, 2000];
+    let step = 0;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const schedule = (delay: number): void => {
+      if (cancelled) return;
+      timer = setTimeout(() => {
+        if (cancelled) return;
+        const clipMs = playChooseLock();
+        step += 1;
+        const nextGap = gaps[Math.min(step, gaps.length - 1)] ?? 2000;
+        schedule(clipMs + nextGap);
+      }, delay);
+    };
+
+    schedule(gaps[0] ?? 5000);
+
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [lockPickWrap]);
 
   function callShowdown() {
     clearAutoEnd();

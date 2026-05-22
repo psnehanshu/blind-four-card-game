@@ -27,6 +27,7 @@ interface Voices {
   padReverb: Tone.Reverb;
   padGain: Tone.Gain;
   yourTurn: Tone.Player;
+  chooseLock: Tone.Player;
   sad: Tone.MonoSynth;
 }
 
@@ -144,6 +145,9 @@ export async function startAudio(): Promise<void> {
   // ── sampled "your turn" cue (bypasses reverb so the spoken cue stays crisp)
   const yourTurn = new Tone.Player({ url: "/your-turn.mp3", volume: -4 }).connect(master);
 
+  // ── spoken nag urging the player to pick a card for the lock power
+  const chooseLock = new Tone.Player({ url: "/choose-card-to-lock.mp3", volume: -2 }).connect(master);
+
   // ── sad trombone: brassy sawtooth through a lowpass + portamento so notes
   // glide into each other (the slide is what makes "wah-wah-waaah" register
   // as a trombone rather than a series of bell pings). Extra reverb tail to
@@ -184,6 +188,7 @@ export async function startAudio(): Promise<void> {
     padReverb,
     padGain,
     yourTurn,
+    chooseLock,
     sad,
   };
   // Wait for sampled buffers (yourTurn) to finish loading before reporting ready,
@@ -293,6 +298,16 @@ export function playYourTurn(): void {
   if (!voices || !voices.yourTurn.loaded) return;
   if (voices.yourTurn.state === "started") voices.yourTurn.stop();
   voices.yourTurn.start();
+}
+
+/** Plays the clip and returns its duration in milliseconds (0 if not loaded
+ *  or already playing). Callers schedule their next nag relative to the
+ *  returned end time so prompts don't talk over each other. */
+export function playChooseLock(): number {
+  if (!voices || !voices.chooseLock.loaded) return 0;
+  if (voices.chooseLock.state === "started") return 0;
+  voices.chooseLock.start();
+  return voices.chooseLock.buffer.duration * 1000;
 }
 
 // ──────────────────── Background music ────────────────────
