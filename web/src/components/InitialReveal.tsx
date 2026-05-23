@@ -2,7 +2,6 @@ import { motion } from "motion/react";
 import type { RemoteEngine } from "../net/useRemoteEngine.js";
 import { CardView } from "./CardView.js";
 import { tiltForSlot } from "../util/rand.js";
-import { playerNameFor } from "../util/playerName.js";
 
 interface Props {
   remote: RemoteEngine;
@@ -13,7 +12,7 @@ export function InitialReveal({ remote }: Props) {
   if (!identity || !visibleState) return null;
 
   const hand = visibleState.myHand ?? [];
-  const name = playerNameFor(identity.playerId, identity.playerId, displayNames);
+  const name = displayNames[identity.playerId] ?? identity.playerId;
 
   function ack() {
     dispatch("ACKNOWLEDGE_REVEAL", undefined);

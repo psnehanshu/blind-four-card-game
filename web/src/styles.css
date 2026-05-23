@@ -1528,10 +1528,6 @@ button.game-code-copy[data-state="copied"] {
   gap: 6px;
 }
 
-.seat-you {
-  font-size: 12px;
-}
-
 /* ───────── reveal-waiting ───────── */
 
 .screen.reveal-waiting {
@@ -1763,6 +1759,12 @@ button.game-code-copy[data-state="copied"] {
 .badge.caller {
   background: rgba(255, 107, 107, 0.2);
   color: #ff8989;
+}
+
+.badge.seat-you-badge {
+  background: rgba(230, 197, 119, 0.18);
+  color: var(--brass-light);
+  border: 1px solid rgba(230, 197, 119, 0.4);
 }
 
 .badge.winner-badge {

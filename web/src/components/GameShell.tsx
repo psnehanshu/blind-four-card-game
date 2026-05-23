@@ -89,7 +89,7 @@ function WaitingForAcknowledge({ remote }: { remote: RemoteEngine }) {
         {players.map((p, i) => {
           const color = SEAT_COLORS[i % SEAT_COLORS.length] ?? SEAT_COLORS[0];
           const isYou = p.id === identity.playerId;
-          const name = playerNameFor(p.id, identity.playerId, displayNames, p.name);
+          const name = displayNames[p.id] ?? p.name ?? p.id;
           const ready = p.acknowledgedReveal;
           return (
             <motion.li
@@ -105,7 +105,7 @@ function WaitingForAcknowledge({ remote }: { remote: RemoteEngine }) {
               </span>
               <span className="seat-name">
                 {name}
-                {isYou && <span className="muted seat-you"> (you)</span>}
+                {isYou && <span className="badge seat-you-badge">YOU</span>}
               </span>
               <span className={`reveal-status ${ready ? "ok" : "pending"}`}>{ready ? "Ready" : "Memorizing…"}</span>
             </motion.li>
