@@ -6,7 +6,12 @@ import { GameManager } from "./game-manager.js";
 import { Store } from "./store.js";
 import { MSG_CHANNEL, type ServerMsg } from "./wire.js";
 import { ClientMsgSchema, type GameEventMsg } from "./wire-schema.js";
+import { nextBotPlayerId, pickBotAction } from "./bot.js";
 import z from "zod";
+
+const DEFAULT_BOT_NAME = "Kishore";
+/** Pause between bot actions so the human UI has time to render each step. */
+const BOT_DELAY_MS = Number(process.env.BOT_DELAY_MS ?? 700);
 
 interface SocketData {
   gameId?: string;
@@ -39,10 +44,12 @@ function socketData(socket: Socket): SocketData {
 
 /** PlayerIds whose sockets are currently joined to the game's room. The set
  *  reflects live TCP/WebSocket presence — sockets that have disconnected are
- *  already gone from the room by the time this is called. */
-async function onlinePlayerIds(io: Server, gameId: string): Promise<string[]> {
+ *  already gone from the room by the time this is called. Bots are always
+ *  reported as online since they have no socket but are always "present". */
+async function onlinePlayerIds(io: Server, store: Store, gameId: string): Promise<string[]> {
   const sockets = await io.in(gameId).fetchSockets();
-  const ids = new Set<string>();
+  const row = store.loadGameRow(gameId);
+  const ids = new Set<string>(row?.botPlayerIds ?? []);
   for (const s of sockets) {
     if (isRecord(s.data) && typeof s.data.playerId === "string") {
       ids.add(s.data.playerId);
@@ -71,6 +78,8 @@ export function attachSocketHandlers(io: Server, store: Store, manager: GameMana
           void handleJoinGame(socket, io, store, manager, msg);
         } else if (msg.kind === "START_GAME") {
           void handleStartGame(socket, io, store, manager, msg.gameId);
+        } else if (msg.kind === "ADD_BOT") {
+          void handleAddBot(socket, io, store, msg.gameId, msg.displayName ?? DEFAULT_BOT_NAME);
         } else if (msg.kind === "GAME_EVENT") {
           void handleGameEvent(socket, io, store, manager, msg);
         } else if (msg.kind === "REQUEST_STATE") {
@@ -207,6 +216,31 @@ async function handleStartGame(
   store.startGame(gameId, seed, turnOrder);
   manager.startEngine(gameId, turnOrder, seed);
   await broadcastState(io, store, manager, gameId, [], undefined, undefined);
+  void driveBots(io, store, manager, gameId);
+}
+
+async function handleAddBot(socket: Socket, io: Server, store: Store, gameId: string, displayName: string): Promise<void> {
+  const data = socketData(socket);
+  const row = store.loadGameRow(gameId);
+  if (!row) {
+    send(socket, { kind: "ERROR", message: "No such game" });
+    return;
+  }
+  if (data.playerId !== row.hostPlayerId) {
+    send(socket, { kind: "ERROR", message: "Only the host can add a bot" });
+    return;
+  }
+  if (row.status !== "lobby") {
+    send(socket, { kind: "ERROR", message: "Cannot add a bot — game already started" });
+    return;
+  }
+  if (row.playerIds.length >= MAX_PLAYERS) {
+    send(socket, { kind: "ERROR", message: "Lobby is full" });
+    return;
+  }
+  const botId = shortId("bot");
+  store.addLobbyBot(gameId, botId, displayName);
+  await broadcastLobby(io, store, gameId);
 }
 
 async function handleGameEvent(
@@ -227,6 +261,7 @@ async function handleGameEvent(
     return;
   }
   await broadcastState(io, store, manager, msg.gameId, result.events, result.peekResult, data.playerId);
+  void driveBots(io, store, manager, msg.gameId);
 }
 
 async function broadcastLobby(io: Server, store: Store, gameId: string): Promise<void> {
@@ -236,13 +271,14 @@ async function broadcastLobby(io: Server, store: Store, gameId: string): Promise
     playerId: pid,
     displayName: row.displayNames[pid] ?? pid,
   }));
-  const online = await onlinePlayerIds(io, gameId);
+  const online = await onlinePlayerIds(io, store, gameId);
   const msg: ServerMsg = {
     kind: "LOBBY",
     gameId,
     hostPlayerId: row.hostPlayerId,
     players,
     onlinePlayerIds: online,
+    botPlayerIds: row.botPlayerIds,
   };
   io.to(gameId).emit(MSG_CHANNEL, msg);
 }
@@ -260,7 +296,7 @@ async function broadcastState(
   if (!row) return;
   const displayNames = row.displayNames;
   const sockets = await io.in(gameId).fetchSockets();
-  const online = new Set<string>();
+  const online = new Set<string>(row.botPlayerIds);
   for (const s of sockets) {
     if (isRecord(s.data) && typeof s.data.playerId === "string") online.add(s.data.playerId);
   }
@@ -284,6 +320,7 @@ async function broadcastState(
       lastEvents: snap.lastEvents,
       displayNames,
       onlinePlayerIds: onlineList,
+      botPlayerIds: row.botPlayerIds,
       ...(snap.winnerIds ? { winnerIds: snap.winnerIds } : {}),
       ...(snap.peekResult ? { peekResult: snap.peekResult } : {}),
     };
@@ -308,7 +345,7 @@ async function sendStateTo(
   if (!row) return;
   const snap = manager.snapshotFor(gameId, playerId, [], undefined);
   if (!snap) return;
-  const online = await onlinePlayerIds(io, gameId);
+  const online = await onlinePlayerIds(io, store, gameId);
   const msg: ServerMsg = {
     kind: "STATE",
     gameId,
@@ -318,6 +355,7 @@ async function sendStateTo(
     lastEvents: [],
     displayNames: row.displayNames,
     onlinePlayerIds: online,
+    botPlayerIds: row.botPlayerIds,
     ...(snap.winnerIds ? { winnerIds: snap.winnerIds } : {}),
   };
   send(socket, msg);
@@ -347,15 +385,61 @@ async function handleRequestState(
       playerId: pid,
       displayName: row.displayNames[pid] ?? pid,
     }));
-    const online = await onlinePlayerIds(io, gameId);
+    const online = await onlinePlayerIds(io, store, gameId);
     send(socket, {
       kind: "LOBBY",
       gameId,
       hostPlayerId: row.hostPlayerId,
       players,
       onlinePlayerIds: online,
+      botPlayerIds: row.botPlayerIds,
     });
     return;
   }
   await sendStateTo(socket, io, store, manager, gameId, data.playerId);
+  void driveBots(io, store, manager, gameId);
+}
+
+// ─── Bot driver ───────────────────────────────────────────────────────
+// Loop bot actions for one game, with a small UX delay between steps so
+// humans can see what's happening. Per-game lock prevents concurrent
+// drivers from racing on the same engine when multiple events trigger
+// driveBots in quick succession (e.g., a human action that hands the
+// turn to a bot fires while a previous bot loop is still draining).
+
+const driveInFlight = new Map<string, Promise<void>>();
+
+async function driveBots(io: Server, store: Store, manager: GameManager, gameId: string): Promise<void> {
+  const existing = driveInFlight.get(gameId);
+  if (existing) return existing;
+  const run = driveBotsLoop(io, store, manager, gameId).finally(() => driveInFlight.delete(gameId));
+  driveInFlight.set(gameId, run);
+  return run;
+}
+
+async function driveBotsLoop(io: Server, store: Store, manager: GameManager, gameId: string): Promise<void> {
+  // Hard cap so a logic bug can't spin forever. A real game tops out at
+  // a few dozen bot actions; 500 is comfortably above any normal upper bound.
+  for (let i = 0; i < 500; i++) {
+    const row = store.loadGameRow(gameId);
+    if (!row || row.status === "finished") return;
+    const engine = manager.getEngine(gameId);
+    if (!engine) return;
+    const botIds = new Set(row.botPlayerIds);
+    if (botIds.size === 0) return;
+    const botId = nextBotPlayerId(engine, botIds);
+    if (!botId) return;
+
+    const action = pickBotAction(engine, botId);
+    if (!action) return;
+
+    if (BOT_DELAY_MS > 0) await new Promise((r) => setTimeout(r, BOT_DELAY_MS));
+
+    const result = manager.process(gameId, botId, action.type, action.payload);
+    if (result.error) {
+      console.error(`[bot ${botId}] engine rejected ${action.type}: ${result.error}`);
+      return;
+    }
+    await broadcastState(io, store, manager, gameId, result.events, result.peekResult, botId);
+  }
 }

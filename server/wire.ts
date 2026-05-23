@@ -25,8 +25,11 @@ export type ServerMsg =
       gameId: string;
       hostPlayerId: string;
       players: LobbyPlayer[];
-      /** PlayerIds of seats currently bound to a live socket. Server-managed. */
+      /** PlayerIds of seats currently bound to a live socket. Server-managed.
+       *  Bots are always included — they have no socket but are always "present". */
       onlinePlayerIds: string[];
+      /** PlayerIds occupied by server-driven bots. Subset of players. */
+      botPlayerIds: string[];
     }
   | {
       kind: "STATE";
@@ -41,8 +44,11 @@ export type ServerMsg =
       peekResult?: PeekResult;
       /** Display names indexed by playerId — server-managed, not in the engine. */
       displayNames: Record<string, string>;
-      /** PlayerIds of seats currently bound to a live socket. Server-managed. */
+      /** PlayerIds of seats currently bound to a live socket. Server-managed.
+       *  Bots are always included — they have no socket but are always "present". */
       onlinePlayerIds: string[];
+      /** PlayerIds occupied by server-driven bots. Subset of players. */
+      botPlayerIds: string[];
     }
   | { kind: "ERROR"; message: string };
 

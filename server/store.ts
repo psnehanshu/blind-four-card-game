@@ -12,6 +12,8 @@ export interface GameRow {
   hostPlayerId: string;
   playerIds: string[];
   displayNames: Record<string, string>;
+  /** Subset of playerIds occupied by server-driven bots (no socket binding). */
+  botPlayerIds: string[];
   seed: number | null;
   createdAt: number;
   startedAt: number | null;
@@ -19,14 +21,15 @@ export interface GameRow {
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS games (
-  id             TEXT PRIMARY KEY,
-  status         TEXT NOT NULL,
-  host_player_id TEXT NOT NULL,
-  player_ids     TEXT NOT NULL,
-  display_names  TEXT NOT NULL,
-  seed           INTEGER,
-  created_at     INTEGER NOT NULL,
-  started_at     INTEGER
+  id              TEXT PRIMARY KEY,
+  status          TEXT NOT NULL,
+  host_player_id  TEXT NOT NULL,
+  player_ids      TEXT NOT NULL,
+  display_names   TEXT NOT NULL,
+  bot_player_ids  TEXT NOT NULL DEFAULT '[]',
+  seed            INTEGER,
+  created_at      INTEGER NOT NULL,
+  started_at      INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS events (
@@ -95,12 +98,15 @@ function parseStringMap(json: string, field: string): Record<string, string> {
 
 function toGameRow(raw: unknown): GameRow {
   if (!isRecord(raw)) throw new Error("game row not an object");
+  const botRaw = raw.bot_player_ids;
+  const botJson = typeof botRaw === "string" ? botRaw : "[]";
   return {
     id: asString(raw.id, "id"),
     status: parseStatus(asString(raw.status, "status")),
     hostPlayerId: asString(raw.host_player_id, "host_player_id"),
     playerIds: parseStringArray(asString(raw.player_ids, "player_ids"), "player_ids"),
     displayNames: parseStringMap(asString(raw.display_names, "display_names"), "display_names"),
+    botPlayerIds: parseStringArray(botJson, "bot_player_ids"),
     seed: asNumberOrNull(raw.seed, "seed"),
     createdAt: asNumber(raw.created_at, "created_at"),
     startedAt: asNumberOrNull(raw.started_at, "started_at"),
@@ -171,6 +177,17 @@ export class Store {
     this.db.pragma("journal_mode = WAL");
     this.db.pragma("foreign_keys = ON");
     this.db.exec(SCHEMA);
+    this.migrate();
+  }
+
+  /** Apply forward-only migrations for DBs created by older schema versions. */
+  private migrate(): void {
+    const rawCols: unknown = this.db.pragma("table_info(games)");
+    if (!Array.isArray(rawCols)) return;
+    const hasBotColumn = rawCols.some((c) => isRecord(c) && c.name === "bot_player_ids");
+    if (!hasBotColumn) {
+      this.db.exec("ALTER TABLE games ADD COLUMN bot_player_ids TEXT NOT NULL DEFAULT '[]'");
+    }
   }
 
   close(): void {
@@ -201,6 +218,21 @@ export class Store {
     this.db
       .prepare("UPDATE games SET player_ids = ?, display_names = ? WHERE id = ?")
       .run(JSON.stringify(playerIds), JSON.stringify(displayNames), gameId);
+  }
+
+  /** Add a bot seat to the lobby. Bot occupies a player slot but has no
+   *  socket — the server drives its turns directly. */
+  addLobbyBot(gameId: string, botId: string, displayName: string): void {
+    const game = this.loadGameRow(gameId);
+    if (!game) throw new Error(`Game not found: ${gameId}`);
+    if (game.status !== "lobby") throw new Error("Cannot add bot — game already started");
+    if (game.playerIds.includes(botId)) return;
+    const playerIds = [...game.playerIds, botId];
+    const displayNames = { ...game.displayNames, [botId]: displayName };
+    const botPlayerIds = [...game.botPlayerIds, botId];
+    this.db
+      .prepare("UPDATE games SET player_ids = ?, display_names = ?, bot_player_ids = ? WHERE id = ?")
+      .run(JSON.stringify(playerIds), JSON.stringify(displayNames), JSON.stringify(botPlayerIds), gameId);
   }
 
   startGame(gameId: string, seed: number, orderedPlayerIds: string[]): void {

@@ -1824,6 +1824,12 @@ button.game-code-copy[data-state="copied"] {
   vertical-align: 2px;
 }
 
+.badge.bot-badge {
+  background: rgba(124, 188, 255, 0.18);
+  color: #7cbcff;
+  border: 1px solid rgba(124, 188, 255, 0.4);
+}
+
 .reveal,
 .done {
   justify-content: center;

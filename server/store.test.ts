@@ -79,4 +79,18 @@ describe("Store — persistence round-trip", () => {
     store.close();
     rmSync(file, { force: true });
   });
+
+  it("bot seats persist as part of the lobby roster", () => {
+    const file = tmpFile();
+    const store = new Store(file);
+    store.createLobby({ gameId: "G", hostPlayerId: "alice", hostDisplayName: "Alice" });
+    store.addLobbyBot("G", "bot-1", "Kishore");
+    const row = store.loadGameRow("G");
+    assert.ok(row);
+    assert.deepEqual(row.playerIds, ["alice", "bot-1"]);
+    assert.deepEqual(row.botPlayerIds, ["bot-1"]);
+    assert.equal(row.displayNames["bot-1"], "Kishore");
+    store.close();
+    rmSync(file, { force: true });
+  });
 });

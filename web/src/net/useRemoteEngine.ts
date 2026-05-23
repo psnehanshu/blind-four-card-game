@@ -25,6 +25,8 @@ export interface LobbyState {
   gameId: string;
   hostPlayerId: string;
   players: { playerId: string; displayName: string }[];
+  /** Subset of players that are server-driven bots. */
+  botPlayerIds: string[];
 }
 
 export interface RemoteEngine {
@@ -104,7 +106,12 @@ export function useRemoteEngine(initial: InitialAction): RemoteEngine {
         return;
       }
       if (msg.kind === "LOBBY") {
-        setLobby({ gameId: msg.gameId, hostPlayerId: msg.hostPlayerId, players: msg.players });
+        setLobby({
+          gameId: msg.gameId,
+          hostPlayerId: msg.hostPlayerId,
+          players: msg.players,
+          botPlayerIds: msg.botPlayerIds,
+        });
         setOnlinePlayerIds(new Set(msg.onlinePlayerIds));
         return;
       }

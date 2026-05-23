@@ -133,6 +133,11 @@ export const ClientMsgSchema = z.discriminatedUnion("kind", [
     kind: z.literal("START_GAME"),
     gameId: z.string(),
   }),
+  z.object({
+    kind: z.literal("ADD_BOT"),
+    gameId: z.string(),
+    displayName: z.string().optional(),
+  }),
   GameEventMsgSchema,
   z.object({
     kind: z.literal("REQUEST_STATE"),

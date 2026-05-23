@@ -32,7 +32,9 @@ export function Lobby({ remote }: Props) {
 
   const isHost = identity.playerId === identity.hostPlayerId;
   const players = lobby?.players ?? [];
+  const botIds = new Set(lobby?.botPlayerIds ?? []);
   const canStart = isHost && players.length >= MIN_PLAYERS;
+  const canAddBot = isHost && players.length < MAX_PLAYERS;
   const inviteUrl = typeof window === "undefined" ? "" : `${window.location.origin}/#/game/${identity.gameId}`;
   // Show one dashed placeholder seat when below the minimum to make the "needs
   // more players" state obvious, and one when above the minimum to hint that
@@ -43,6 +45,10 @@ export function Lobby({ remote }: Props) {
 
   function start() {
     send({ kind: "START_GAME", gameId });
+  }
+
+  function addBot() {
+    send({ kind: "ADD_BOT", gameId });
   }
 
   async function share() {
@@ -156,6 +162,7 @@ export function Lobby({ remote }: Props) {
               const color = SEAT_COLORS[i % SEAT_COLORS.length] ?? SEAT_COLORS[0];
               const isYou = p.playerId === identity.playerId;
               const isHostSeat = p.playerId === identity.hostPlayerId;
+              const isBot = botIds.has(p.playerId);
               return (
                 <motion.li
                   key={p.playerId}
@@ -172,6 +179,7 @@ export function Lobby({ remote }: Props) {
                   <span className="seat-name">
                     {p.displayName}
                     {isYou && <span className="badge seat-you-badge">YOU</span>}
+                    {isBot && <span className="badge bot-badge">BOT</span>}
                   </span>
                   {isHostSeat && <span className="badge caller">HOST</span>}
                 </motion.li>
@@ -197,9 +205,14 @@ export function Lobby({ remote }: Props) {
       {remote.lastError && <div className="error">{remote.lastError}</div>}
 
       {isHost ? (
-        <button type="button" className="primary big" disabled={!canStart} onClick={start}>
-          {canStart ? "Start game" : `Waiting for ${MIN_PLAYERS - players.length} more player(s)`}
-        </button>
+        <>
+          <button type="button" className="primary big" disabled={!canStart} onClick={start}>
+            {canStart ? "Start game" : `Waiting for ${MIN_PLAYERS - players.length} more player(s)`}
+          </button>
+          <button type="button" className="ghost" disabled={!canAddBot} onClick={addBot}>
+            + Add Kishore (bot)
+          </button>
+        </>
       ) : (
         <p className="muted">Waiting for the host to start the game…</p>
       )}
