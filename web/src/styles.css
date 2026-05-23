@@ -1815,6 +1815,14 @@ button.game-code-copy[data-state="copied"] {
   color: #5cd99a;
 }
 
+.badge.offline-badge {
+  background: rgba(255, 107, 107, 0.18);
+  color: #ff8989;
+  border: 1px solid rgba(255, 107, 107, 0.35);
+  margin-left: 10px;
+  vertical-align: 2px;
+}
+
 .reveal,
 .done {
   justify-content: center;

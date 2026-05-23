@@ -534,11 +534,12 @@ export function TurnView({ remote }: Props) {
     <div className="screen screen--locked turn">
       <header className="turn-header">
         <h2>
-          <span
-            className={`presence-dot${onlinePlayerIds.has(playerId) ? " is-online" : " is-offline"}`}
-            aria-label={onlinePlayerIds.has(playerId) ? "Online" : "Offline"}
-          />
           Your turn
+          {!onlinePlayerIds.has(playerId) && (
+            <span className="badge offline-badge" aria-label="Offline">
+              OFFLINE
+            </span>
+          )}
         </h2>
         <div className="turn-header-actions">
           {awaitingOpponentPick && (

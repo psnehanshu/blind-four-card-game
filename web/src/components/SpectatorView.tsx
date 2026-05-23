@@ -186,11 +186,12 @@ export function SpectatorView({ remote }: Props) {
     <div className="screen screen--locked turn">
       <header className="turn-header">
         <h2>
-          <span
-            className={`presence-dot${onlinePlayerIds.has(myId) ? " is-online" : " is-offline"}`}
-            aria-label={onlinePlayerIds.has(myId) ? "Online" : "Offline"}
-          />
           Waiting on {currentName}…
+          {!onlinePlayerIds.has(myId) && (
+            <span className="badge offline-badge" aria-label="Offline">
+              OFFLINE
+            </span>
+          )}
         </h2>
       </header>
 
