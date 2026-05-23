@@ -4,7 +4,8 @@ import type { CommittedEvent, EngineResult, PeekResult, PowerAction, ProposedEve
 import { MAX_PLAYERS } from "../engine/types.js";
 import { GameManager } from "./game-manager.js";
 import { Store } from "./store.js";
-import { MSG_CHANNEL, type ClientMsg, type ServerMsg } from "./wire.js";
+import { MSG_CHANNEL, type ServerMsg } from "./wire.js";
+import { ClientMsgSchema } from "./wire-schema.js";
 
 interface SocketData {
   gameId?: string;
@@ -13,49 +14,6 @@ interface SocketData {
 
 function isRecord(x: unknown): x is Record<string, unknown> {
   return !!x && typeof x === "object" && !Array.isArray(x);
-}
-
-function asProposedEventType(x: unknown): ProposedEventType | null {
-  if (x === "ACKNOWLEDGE_REVEAL") return x;
-  if (x === "DRAW_CARD") return x;
-  if (x === "REPLACE_CARD") return x;
-  if (x === "DISCARD_DRAWN") return x;
-  if (x === "CALL_SHOWDOWN") return x;
-  if (x === "USE_POWER") return x;
-  if (x === "END_TURN") return x;
-  return null;
-}
-
-function parseClientMsg(raw: unknown): ClientMsg | null {
-  if (!isRecord(raw)) return null;
-  const { kind } = raw;
-  if (kind === "CREATE_GAME") {
-    if (typeof raw.displayName !== "string") return null;
-    const seed = typeof raw.seed === "number" ? raw.seed : undefined;
-    return seed === undefined ? { kind, displayName: raw.displayName } : { kind, displayName: raw.displayName, seed };
-  }
-  if (kind === "JOIN_GAME") {
-    if (typeof raw.gameId !== "string" || typeof raw.displayName !== "string") return null;
-    const token = typeof raw.sessionToken === "string" ? raw.sessionToken : undefined;
-    return token === undefined
-      ? { kind, gameId: raw.gameId, displayName: raw.displayName }
-      : { kind, gameId: raw.gameId, displayName: raw.displayName, sessionToken: token };
-  }
-  if (kind === "START_GAME") {
-    if (typeof raw.gameId !== "string") return null;
-    return { kind, gameId: raw.gameId };
-  }
-  if (kind === "GAME_EVENT") {
-    if (typeof raw.gameId !== "string") return null;
-    const type = asProposedEventType(raw.type);
-    if (!type) return null;
-    return { kind, gameId: raw.gameId, type, payload: raw.payload };
-  }
-  if (kind === "REQUEST_STATE") {
-    if (typeof raw.gameId !== "string") return null;
-    return { kind, gameId: raw.gameId };
-  }
-  return null;
 }
 
 function send(socket: Socket, msg: ServerMsg): void {
@@ -98,11 +56,12 @@ export function attachSocketHandlers(io: Server, store: Store, manager: GameMana
     socketData(socket);
 
     socket.on(MSG_CHANNEL, (raw: unknown) => {
-      const msg = parseClientMsg(raw);
-      if (!msg) {
+      const res = ClientMsgSchema.safeParse(raw);
+      if (!res.success) {
         send(socket, { kind: "ERROR", message: "Malformed message" });
         return;
       }
+      const msg = res.data;
 
       try {
         if (msg.kind === "CREATE_GAME") {
