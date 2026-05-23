@@ -130,8 +130,8 @@ export async function startAudio(): Promise<void> {
     volume: -20,
   }).connect(reverb);
 
-  // ── ambient pad (background music) — its own deeper reverb + low gain
-  const padGain = new Tone.Gain(0.5).connect(master);
+  // ── ambient pad (background music) — its own deeper reverb
+  const padGain = new Tone.Gain(1.0).connect(master);
   const padReverb = new Tone.Reverb({ decay: 8, wet: 0.7 }).connect(padGain);
   const pad = new Tone.PolySynth(Tone.AMSynth, {
     harmonicity: 1.5,
@@ -268,6 +268,17 @@ export function playWin(): void {
 export function playButton(): void {
   if (!voices) return;
   voices.tone.triggerAttackRelease("C5", "32n", nextTime("tone"), 0.4);
+}
+
+/** Warm two-note ascending "ding" played when a new seat fills in the lobby. */
+export function playPlayerJoin(): void {
+  if (!voices) return;
+  const t0 = nextTime("pluck");
+  voices.pluck.triggerAttackRelease("C5", "8n", t0);
+  voices.pluck.triggerAttackRelease("G5", "8n", t0 + 0.12);
+  lastTime.set("pluck", t0 + 0.12);
+  // A faint bell tap on the second note for a little sparkle.
+  voices.bell.triggerAttackRelease("G6", "16n", nextTime("bell"), 0.5);
 }
 
 /**

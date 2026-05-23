@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { MAX_PLAYERS, MIN_PLAYERS } from "../../../engine/types.js";
 import { send } from "../net/socket.js";
 import type { RemoteEngine } from "../net/useRemoteEngine.js";
+import { playPlayerJoin } from "../audio/sound.js";
 
 interface Props {
   remote: RemoteEngine;
@@ -33,6 +34,17 @@ export function Lobby({ remote }: Props) {
   const isHost = identity.playerId === identity.hostPlayerId;
   const players = lobby?.players ?? [];
   const botIds = new Set(lobby?.botPlayerIds ?? []);
+
+  // Play a join chime whenever a new seat appears (human or bot). The ref
+  // guards against firing on the initial mount when the host's own seat
+  // shows up, and against firing when seats leave the lobby.
+  const prevPlayerCount = useRef<number | null>(null);
+  useEffect(() => {
+    const count = players.length;
+    const prev = prevPlayerCount.current;
+    if (prev !== null && count > prev) playPlayerJoin();
+    prevPlayerCount.current = count;
+  }, [players.length]);
   const canStart = isHost && players.length >= MIN_PLAYERS;
   const canAddBot = isHost && players.length < MAX_PLAYERS;
   const inviteUrl = typeof window === "undefined" ? "" : `${window.location.origin}/#/game/${identity.gameId}`;
