@@ -30,6 +30,10 @@ npm run dev
 
 Open <http://localhost:5173>, create a game, share the room code with a friend, start.
 
+## Bots
+
+Short on friends? The host can add **Kishore** — a server-driven bot — from the lobby to fill seats. Kishore plays by a handful of hardcoded rules (always draws from the deck, replaces when the drawn card beats the highest unlocked one, calls showdown below 10) with a 30% mistake rate so it isn't a free win. Add more than one and they're auto-numbered: Kishore, Kishore 2, Kishore 3, …
+
 ## Repository layout
 
 ```text
