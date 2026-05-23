@@ -67,7 +67,6 @@ export function CardView({
 
   return (
     <motion.div className="card-slot" {...motionProps}>
-      {label && <span className="card-label">{label}</span>}
       <div className="card-stack">
         <CardFace card={card} hidden={hidden} size={size} tilt={tilt} locked={!!lockMarker} />
         <AnimatePresence>
@@ -90,6 +89,7 @@ export function CardView({
           </span>
         )}
       </div>
+      {label && <span className="card-label">{label}</span>}
     </motion.div>
   );
 }
