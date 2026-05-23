@@ -74,8 +74,8 @@ export function CardView({
             <motion.div
               key={`marker-${lockMarker.id}`}
               className="lock-marker"
-              initial={skipMarkerEntry ? false : { y: -40, rotate: -45, scale: 0.6, opacity: 0 }}
-              animate={{ y: 0, rotate: -8, scale: 1, opacity: 1 }}
+              initial={skipMarkerEntry ? false : { x: 0, y: -40, rotate: -45, scale: 0.6, opacity: 0 }}
+              animate={{ x: -10, y: -3, rotate: -4, scale: 1, opacity: 1 }}
               exit={{ y: -40, opacity: 0 }}
               transition={{ type: "spring", stiffness: 280, damping: 16 }}
             >

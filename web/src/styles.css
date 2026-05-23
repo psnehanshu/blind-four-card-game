@@ -462,8 +462,9 @@ button.slot-btn:active:not(:disabled) {
 }
 
 .card-locked {
-  outline: 2px solid #f5c542;
-  outline-offset: 2px;
+  /* The lock marker overlay sits on top of this card and already carries a
+     yellow halo, so no second outline is needed here — it just made adjacent
+     locked slots collide visually. */
 }
 
 .card-rank {
@@ -532,12 +533,12 @@ button.slot-btn:active:not(:disabled) {
 .hand {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 18px;
   justify-content: center;
 }
 
 .hand.small {
-  gap: 6px;
+  gap: 12px;
 }
 
 /* ───────── pass-device gate ───────── */
