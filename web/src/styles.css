@@ -159,6 +159,10 @@ body {
   text-align: center;
 }
 
+.my-hand-hint.is-hidden {
+  visibility: hidden;
+}
+
 input,
 textarea {
   user-select: text;

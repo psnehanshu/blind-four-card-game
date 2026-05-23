@@ -268,11 +268,13 @@ export function SpectatorView({ remote }: Props) {
             <DiscardStack cards={hideDiscardTopForFlight ? visible.discardPile.slice(0, -1) : visible.discardPile} />
           </div>
         </div>
-        <div className="pile drawn placeholder-slot" aria-hidden="true" />
         <Cheatsheet />
       </section>
 
       <section className="my-hand">
+        <p className="my-hand-hint muted is-hidden" aria-hidden="true">
+          Tap a slot to replace.
+        </p>
         <Hand className="hand" shakeNonce={shuffleNonceFor(myId)}>
           {Array.from({ length: myHandSize }).map((_, i) => {
             const marker = myMarkers.get(i);

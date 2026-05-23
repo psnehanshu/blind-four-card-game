@@ -748,7 +748,9 @@ export function TurnView({ remote }: Props) {
       </AnimatePresence>
 
       <section className="my-hand">
-        {canReplace && <p className="my-hand-hint muted">Tap a slot to replace.</p>}
+        <p className={`my-hand-hint muted${canReplace ? "" : " is-hidden"}`} aria-hidden={!canReplace}>
+          Tap a slot to replace.
+        </p>
         <Hand className="hand" shakeNonce={shuffleNonceFor(playerId)}>
           {Array.from({ length: handSize }).map((_, i) => {
             const marker = myMarkers.get(i);
