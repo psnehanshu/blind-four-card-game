@@ -711,24 +711,45 @@ button.slot-btn:active:not(:disabled) {
 /* Tiny status dot shown next to a player's name. Green = socket connected,
    grey = disconnected (server lost their socket). Inline-block so it sits
    inline with names; vertical-align nudges it to optical center. */
+/* Brass cabochon set into the seat. Lit ember when online; cold dark stone
+   when the socket drops. Sized and tinted to read as part of the gilt trim
+   rather than a sci-fi LED. */
 .presence-dot {
   display: inline-block;
-  width: 8px;
-  height: 8px;
+  width: 9px;
+  height: 9px;
   border-radius: 50%;
-  margin-right: 6px;
+  margin-right: 8px;
   vertical-align: 1px;
   flex-shrink: 0;
+  border: 1px solid var(--brass-dark);
 }
 
 .presence-dot.is-online {
-  background: #4ade80;
-  box-shadow: 0 0 6px rgba(74, 222, 128, 0.7);
+  background: radial-gradient(circle at 35% 30%, #fff1c8 0%, #e6c577 45%, #8a6a26 100%);
+  box-shadow:
+    inset 0 -1px 1px rgba(0, 0, 0, 0.35),
+    0 0 6px rgba(230, 197, 119, 0.6);
+  animation: presence-ember 2.6s ease-in-out infinite;
 }
 
 .presence-dot.is-offline {
-  background: #555;
-  box-shadow: none;
+  background: radial-gradient(circle at 35% 30%, #3a2818 0%, #120a04 100%);
+  box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.55);
+}
+
+@keyframes presence-ember {
+  0%,
+  100% {
+    box-shadow:
+      inset 0 -1px 1px rgba(0, 0, 0, 0.35),
+      0 0 5px rgba(230, 197, 119, 0.45);
+  }
+  50% {
+    box-shadow:
+      inset 0 -1px 1px rgba(0, 0, 0, 0.35),
+      0 0 11px rgba(230, 197, 119, 0.85);
+  }
 }
 
 /* Faint cheatsheet strip on the table showing hand-values per rank. Low
