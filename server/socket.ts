@@ -1,11 +1,11 @@
 import type { Server, Socket } from "socket.io";
 import { randomBytes } from "node:crypto";
-import type { CommittedEvent, EngineResult, PeekResult, PowerAction, ProposedEventType } from "../engine/types.js";
+import type { CommittedEvent, EngineResult, PeekResult } from "../engine/types.js";
 import { MAX_PLAYERS } from "../engine/types.js";
 import { GameManager } from "./game-manager.js";
 import { Store } from "./store.js";
 import { MSG_CHANNEL, type ServerMsg } from "./wire.js";
-import { ClientMsgSchema } from "./wire-schema.js";
+import { ClientMsgSchema, type GameEventMsg } from "./wire-schema.js";
 
 interface SocketData {
   gameId?: string;
@@ -208,37 +208,21 @@ async function handleStartGame(
   await broadcastState(io, store, manager, gameId, [], undefined, undefined);
 }
 
-/** Type guard mirroring engine.isPowerPayload — we trust the engine to deep-validate. */
-function isPowerActionShape(p: unknown): p is PowerAction {
-  return isRecord(p) && typeof p.power === "string";
-}
-
-function dispatchGameEvent(
-  manager: GameManager,
-  gameId: string,
-  playerId: string,
-  type: ProposedEventType,
-  payload: unknown,
-): EngineResult {
-  if (type === "ACKNOWLEDGE_REVEAL") return manager.process(gameId, playerId, "ACKNOWLEDGE_REVEAL", undefined);
-  if (type === "DISCARD_DRAWN") return manager.process(gameId, playerId, "DISCARD_DRAWN", undefined);
-  if (type === "CALL_SHOWDOWN") return manager.process(gameId, playerId, "CALL_SHOWDOWN", undefined);
-  if (type === "END_TURN") return manager.process(gameId, playerId, "END_TURN", undefined);
-  if (type === "DRAW_CARD") {
-    if (!isRecord(payload)) throw new Error("DRAW_CARD payload required");
-    const src = payload.source;
-    if (src !== "deck" && src !== "discard") throw new Error("DRAW_CARD source invalid");
-    return manager.process(gameId, playerId, "DRAW_CARD", { source: src });
+function dispatchGameEvent(manager: GameManager, playerId: string, msg: GameEventMsg): EngineResult {
+  const { gameId } = msg;
+  switch (msg.type) {
+    case "ACKNOWLEDGE_REVEAL":
+    case "DISCARD_DRAWN":
+    case "CALL_SHOWDOWN":
+    case "END_TURN":
+      return manager.process(gameId, playerId, msg.type, undefined);
+    case "DRAW_CARD":
+      return manager.process(gameId, playerId, "DRAW_CARD", msg.payload);
+    case "REPLACE_CARD":
+      return manager.process(gameId, playerId, "REPLACE_CARD", msg.payload);
+    case "USE_POWER":
+      return manager.process(gameId, playerId, "USE_POWER", msg.payload);
   }
-  if (type === "REPLACE_CARD") {
-    if (!isRecord(payload)) throw new Error("REPLACE_CARD payload required");
-    const idx = payload.handIndex;
-    if (typeof idx !== "number") throw new Error("REPLACE_CARD handIndex required");
-    return manager.process(gameId, playerId, "REPLACE_CARD", { handIndex: idx });
-  }
-  // USE_POWER.
-  if (!isPowerActionShape(payload)) throw new Error("USE_POWER payload required");
-  return manager.process(gameId, playerId, "USE_POWER", payload);
 }
 
 async function handleGameEvent(
@@ -246,21 +230,14 @@ async function handleGameEvent(
   io: Server,
   store: Store,
   manager: GameManager,
-  msg: { gameId: string; type: ProposedEventType; payload: unknown },
+  msg: GameEventMsg,
 ): Promise<void> {
   const data = socketData(socket);
   if (data.gameId !== msg.gameId || !data.playerId) {
     send(socket, { kind: "ERROR", message: "Not joined to this game" });
     return;
   }
-  let result: EngineResult;
-  try {
-    result = dispatchGameEvent(manager, msg.gameId, data.playerId, msg.type, msg.payload);
-  } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
-    send(socket, { kind: "ERROR", message });
-    return;
-  }
+  const result = dispatchGameEvent(manager, data.playerId, msg);
   if (result.error) {
     send(socket, { kind: "ERROR", message: result.error });
     return;
