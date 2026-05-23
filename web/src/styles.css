@@ -667,9 +667,19 @@ button.slot-btn:active:not(:disabled) {
   outline-offset: 2px;
 }
 
-/* Drawable pile (deck or discard) pulses while it's your turn. */
-.pile.is-active .pile-stack {
+/* Drawable pile (deck or discard) pulses while it's your turn. The halo is
+   painted on a pseudo-element sized to the card itself (not the .pile-stack
+   bounding box, which is larger to host the deck's offset shadow layers), so
+   the glow hugs the card silhouette instead of an empty rectangle around it. */
+.pile.is-active .pile-stack::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: var(--card-w-md);
+  height: var(--card-h-md);
   border-radius: 10px;
+  pointer-events: none;
   animation: pile-pulse 1.4s ease-in-out infinite;
 }
 
