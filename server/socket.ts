@@ -6,6 +6,7 @@ import { GameManager } from "./game-manager.js";
 import { Store } from "./store.js";
 import { MSG_CHANNEL, type ServerMsg } from "./wire.js";
 import { ClientMsgSchema, type GameEventMsg } from "./wire-schema.js";
+import z from "zod";
 
 interface SocketData {
   gameId?: string;
@@ -58,7 +59,7 @@ export function attachSocketHandlers(io: Server, store: Store, manager: GameMana
     socket.on(MSG_CHANNEL, (raw: unknown) => {
       const res = ClientMsgSchema.safeParse(raw);
       if (!res.success) {
-        send(socket, { kind: "ERROR", message: "Malformed message" });
+        send(socket, { kind: "ERROR", message: `Malformed message:\n${z.prettifyError(res.error)}` });
         return;
       }
       const msg = res.data;

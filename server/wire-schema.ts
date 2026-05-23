@@ -75,7 +75,7 @@ const GameEventMsgSchema = z.discriminatedUnion("type", [
     kind: z.literal("GAME_EVENT"),
     gameId: z.string(),
     type: z.literal("ACKNOWLEDGE_REVEAL"),
-    payload: z.undefined(),
+    payload: z.undefined().optional(),
   }),
   z.object({
     kind: z.literal("GAME_EVENT"),
@@ -93,13 +93,13 @@ const GameEventMsgSchema = z.discriminatedUnion("type", [
     kind: z.literal("GAME_EVENT"),
     gameId: z.string(),
     type: z.literal("DISCARD_DRAWN"),
-    payload: z.undefined(),
+    payload: z.undefined().optional(),
   }),
   z.object({
     kind: z.literal("GAME_EVENT"),
     gameId: z.string(),
     type: z.literal("CALL_SHOWDOWN"),
-    payload: z.undefined(),
+    payload: z.undefined().optional(),
   }),
   z.object({
     kind: z.literal("GAME_EVENT"),
@@ -111,7 +111,7 @@ const GameEventMsgSchema = z.discriminatedUnion("type", [
     kind: z.literal("GAME_EVENT"),
     gameId: z.string(),
     type: z.literal("END_TURN"),
-    payload: z.undefined(),
+    payload: z.undefined().optional(),
   }),
 ]);
 
