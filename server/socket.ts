@@ -10,8 +10,32 @@ import { nextBotPlayerId, pickBotAction } from "./bot.js";
 import z from "zod";
 
 const DEFAULT_BOT_NAME = "Kishore";
-/** Pause between bot actions so the human UI has time to render each step. */
-const BOT_DELAY_MS = Number(process.env.BOT_DELAY_MS ?? 700);
+
+// Bot action delay. Default is a random pause between actions so Kishore
+// reads as "thinking" rather than firing instantly. The env override is
+// honored as a fixed value (use 0 to disable in tests/CI).
+const BOT_DELAY_ENV = process.env.BOT_DELAY_MS;
+const BOT_DELAY_FIXED_MS = BOT_DELAY_ENV !== undefined ? Number(BOT_DELAY_ENV) : null;
+const BOT_DELAY_MIN_MS = 1000;
+const BOT_DELAY_MAX_MS = 5000;
+
+function botDelayMs(): number {
+  if (BOT_DELAY_FIXED_MS !== null) return BOT_DELAY_FIXED_MS;
+  return BOT_DELAY_MIN_MS + Math.floor(Math.random() * (BOT_DELAY_MAX_MS - BOT_DELAY_MIN_MS + 1));
+}
+
+/** Suffix a display name to avoid collisions: "Kishore" → "Kishore 2" →
+ *  "Kishore 3" → … if the base name (or earlier suffixes) are already
+ *  taken in the lobby. */
+function uniqueDisplayName(base: string, takenNames: Iterable<string>): string {
+  const taken = new Set(takenNames);
+  if (!taken.has(base)) return base;
+  for (let i = 2; i < 1000; i++) {
+    const candidate = `${base} ${i}`;
+    if (!taken.has(candidate)) return candidate;
+  }
+  throw new Error(`Could not find a unique name for ${base}`);
+}
 
 interface SocketData {
   gameId?: string;
@@ -239,7 +263,8 @@ async function handleAddBot(socket: Socket, io: Server, store: Store, gameId: st
     return;
   }
   const botId = shortId("bot");
-  store.addLobbyBot(gameId, botId, displayName);
+  const uniqueName = uniqueDisplayName(displayName, Object.values(row.displayNames));
+  store.addLobbyBot(gameId, botId, uniqueName);
   await broadcastLobby(io, store, gameId);
 }
 
@@ -433,7 +458,8 @@ async function driveBotsLoop(io: Server, store: Store, manager: GameManager, gam
     const action = pickBotAction(engine, botId);
     if (!action) return;
 
-    if (BOT_DELAY_MS > 0) await new Promise((r) => setTimeout(r, BOT_DELAY_MS));
+    const delay = botDelayMs();
+    if (delay > 0) await new Promise((r) => setTimeout(r, delay));
 
     const result = manager.process(gameId, botId, action.type, action.payload);
     if (result.error) {
