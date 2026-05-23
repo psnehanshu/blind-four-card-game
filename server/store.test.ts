@@ -12,11 +12,11 @@ function tmpFile(): string {
 }
 
 describe("Store — persistence round-trip", () => {
-  it("create lobby → start → append events → close → reopen → replay matches in-memory engine", () => {
+  it("create lobby → start → append events → close → reopen → replay matches in-memory engine", async () => {
     const file = tmpFile();
 
     // ── First open: create the game, drive a handful of events, persist. ──
-    const store1 = new Store(file);
+    const store1 = await Store.open(file);
     const gameId = "GAME1";
     const seed = 42;
     const playerIds = ["alice", "bob"];
@@ -46,7 +46,7 @@ describe("Store — persistence round-trip", () => {
     store1.close();
 
     // ── Second open: hydrate from disk and confirm the replay matches. ──
-    const store2 = new Store(file);
+    const store2 = await Store.open(file);
     const row = store2.loadGameRow(gameId);
     assert.ok(row);
     assert.equal(row.status, "running");
@@ -69,9 +69,9 @@ describe("Store — persistence round-trip", () => {
     rmSync(file, { force: true });
   });
 
-  it("sessions round-trip", () => {
+  it("sessions round-trip", async () => {
     const file = tmpFile();
-    const store = new Store(file);
+    const store = await Store.open(file);
     store.createLobby({ gameId: "G", hostPlayerId: "alice", hostDisplayName: "Alice" });
     const token = store.createSession("G", "alice");
     assert.deepEqual(store.resolveSession(token), { gameId: "G", playerId: "alice" });
@@ -80,9 +80,9 @@ describe("Store — persistence round-trip", () => {
     rmSync(file, { force: true });
   });
 
-  it("bot seats persist as part of the lobby roster", () => {
+  it("bot seats persist as part of the lobby roster", async () => {
     const file = tmpFile();
-    const store = new Store(file);
+    const store = await Store.open(file);
     store.createLobby({ gameId: "G", hostPlayerId: "alice", hostDisplayName: "Alice" });
     store.addLobbyBot("G", "bot-1", "Kishore");
     const row = store.loadGameRow("G");

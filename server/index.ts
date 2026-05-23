@@ -8,7 +8,7 @@ import { Store } from "./store.js";
 const PORT = Number(process.env.PORT ?? 3001);
 const DB_PATH = process.env.DB_PATH ?? resolve("server/data/blind-four.db");
 
-const store = new Store(DB_PATH);
+const store = await Store.open(DB_PATH);
 const manager = new GameManager(store);
 
 const http = createServer();

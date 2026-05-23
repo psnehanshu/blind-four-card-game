@@ -3,6 +3,7 @@ import { randomBytes } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import type { CommittedEvent, EventPayloadMap, ProposedEventType } from "../engine/types.js";
+import { runMigrations } from "./migrator.js";
 
 export type GameStatus = "lobby" | "running" | "finished";
 
@@ -18,37 +19,6 @@ export interface GameRow {
   createdAt: number;
   startedAt: number | null;
 }
-
-const SCHEMA = `
-CREATE TABLE IF NOT EXISTS games (
-  id              TEXT PRIMARY KEY,
-  status          TEXT NOT NULL,
-  host_player_id  TEXT NOT NULL,
-  player_ids      TEXT NOT NULL,
-  display_names   TEXT NOT NULL,
-  bot_player_ids  TEXT NOT NULL DEFAULT '[]',
-  seed            INTEGER,
-  created_at      INTEGER NOT NULL,
-  started_at      INTEGER
-);
-
-CREATE TABLE IF NOT EXISTS events (
-  game_id   TEXT NOT NULL REFERENCES games(id),
-  sequence  INTEGER NOT NULL,
-  event_id  TEXT NOT NULL,
-  timestamp INTEGER NOT NULL,
-  player_id TEXT NOT NULL,
-  type      TEXT NOT NULL,
-  payload   TEXT NOT NULL,
-  PRIMARY KEY (game_id, sequence)
-);
-
-CREATE TABLE IF NOT EXISTS sessions (
-  token     TEXT PRIMARY KEY,
-  game_id   TEXT NOT NULL,
-  player_id TEXT NOT NULL
-);
-`;
 
 function isRecord(x: unknown): x is Record<string, unknown> {
   return !!x && typeof x === "object" && !Array.isArray(x);
@@ -171,23 +141,17 @@ export interface CreateLobbyArgs {
 export class Store {
   private db: Database.Database;
 
-  constructor(filePath: string) {
-    mkdirSync(dirname(filePath), { recursive: true });
-    this.db = new Database(filePath);
-    this.db.pragma("journal_mode = WAL");
-    this.db.pragma("foreign_keys = ON");
-    this.db.exec(SCHEMA);
-    this.migrate();
+  private constructor(db: Database.Database) {
+    this.db = db;
   }
 
-  /** Apply forward-only migrations for DBs created by older schema versions. */
-  private migrate(): void {
-    const rawCols: unknown = this.db.pragma("table_info(games)");
-    if (!Array.isArray(rawCols)) return;
-    const hasBotColumn = rawCols.some((c) => isRecord(c) && c.name === "bot_player_ids");
-    if (!hasBotColumn) {
-      this.db.exec("ALTER TABLE games ADD COLUMN bot_player_ids TEXT NOT NULL DEFAULT '[]'");
-    }
+  static async open(filePath: string): Promise<Store> {
+    mkdirSync(dirname(filePath), { recursive: true });
+    const db = new Database(filePath);
+    db.pragma("journal_mode = WAL");
+    db.pragma("foreign_keys = ON");
+    await runMigrations(db);
+    return new Store(db);
   }
 
   close(): void {
