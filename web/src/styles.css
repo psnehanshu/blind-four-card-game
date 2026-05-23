@@ -582,6 +582,7 @@ button.slot-btn:active:not(:disabled) {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  position: relative;
 }
 
 .opponent-name {
@@ -589,11 +590,22 @@ button.slot-btn:active:not(:disabled) {
   color: var(--muted);
 }
 
-/* Highlight the opponent whose turn it is. The hand pulses with an accent
-   glow, mirroring the cue we use for the local player's drawable piles. */
-.opponent.is-current .hand {
-  border-radius: 12px;
-  padding: 6px;
+/* Highlight the opponent whose turn it is. A radial gradient painted behind
+   the block fades smoothly to transparent in every direction, so no edge of
+   the light source is ever visible — the halo reads as ambient light rather
+   than a shape blurred over the cards. */
+.opponent.is-current::before {
+  content: "";
+  position: absolute;
+  inset: -45% -22%;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(var(--accent-rgb), 0.42) 0%,
+    rgba(var(--accent-rgb), 0.18) 35%,
+    rgba(var(--accent-rgb), 0) 65%
+  );
+  pointer-events: none;
+  z-index: -1;
   animation: opponent-turn-pulse 1.8s ease-in-out infinite;
 }
 
@@ -604,13 +616,11 @@ button.slot-btn:active:not(:disabled) {
 @keyframes opponent-turn-pulse {
   0%,
   100% {
-    box-shadow: 0 0 0 0 rgba(var(--accent-rgb), 0);
+    opacity: 0.55;
   }
 
   50% {
-    box-shadow:
-      0 0 18px 4px rgba(var(--accent-rgb), 0.55),
-      0 0 2px 1px rgba(var(--accent-rgb), 0.45);
+    opacity: 1;
   }
 }
 
@@ -662,13 +672,11 @@ button.slot-btn:active:not(:disabled) {
 @keyframes pile-pulse {
   0%,
   100% {
-    box-shadow: 0 0 0 0 rgba(var(--accent-rgb), 0);
+    box-shadow: 0 0 18px 2px rgba(var(--accent-rgb), 0.18);
   }
 
   50% {
-    box-shadow:
-      0 0 10px 2px rgba(var(--accent-rgb), 0.6),
-      0 0 2px 1px rgba(var(--accent-rgb), 0.45);
+    box-shadow: 0 0 42px 10px rgba(var(--accent-rgb), 0.5);
   }
 }
 
