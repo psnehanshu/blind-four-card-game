@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "test": "tsx --test engine/*.test.ts server/*.test.ts",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && npm --prefix web run typecheck",
     "lint": "eslint",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

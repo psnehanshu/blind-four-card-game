@@ -31,7 +31,7 @@ When adding a new form factor:
 ## Commands
 
 - `npm test` — engine + server tests (`tsx --test engine/*.test.ts server/*.test.ts`)
-- `npm run typecheck` — `tsc --noEmit` over `engine/**` and `server/**`
+- `npm run typecheck` — `tsc --noEmit` over `engine/**` + `server/**`, then `web`'s own `tsc --noEmit`
 - `npm run lint` — ESLint (root config ignores `web/dist`, `web/node_modules`, `web/.vite`, `server/data`)
 - `npm run format` / `npm run format:check` — Prettier write / check (also formats `web/src`)
 - `npm run sanity` — typecheck + lint + format:check + test, in that order. **Run this after every change.**

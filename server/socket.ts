@@ -1,6 +1,6 @@
 import type { Server, Socket } from "socket.io";
 import { randomBytes } from "node:crypto";
-import type { CommittedEvent, EngineResult, PeekResult } from "../engine/types.js";
+import type { CommittedEvent, PeekResult } from "../engine/types.js";
 import { MAX_PLAYERS } from "../engine/types.js";
 import { GameManager } from "./game-manager.js";
 import { Store } from "./store.js";
@@ -208,23 +208,6 @@ async function handleStartGame(
   await broadcastState(io, store, manager, gameId, [], undefined, undefined);
 }
 
-function dispatchGameEvent(manager: GameManager, playerId: string, msg: GameEventMsg): EngineResult {
-  const { gameId } = msg;
-  switch (msg.type) {
-    case "ACKNOWLEDGE_REVEAL":
-    case "DISCARD_DRAWN":
-    case "CALL_SHOWDOWN":
-    case "END_TURN":
-      return manager.process(gameId, playerId, msg.type, undefined);
-    case "DRAW_CARD":
-      return manager.process(gameId, playerId, "DRAW_CARD", msg.payload);
-    case "REPLACE_CARD":
-      return manager.process(gameId, playerId, "REPLACE_CARD", msg.payload);
-    case "USE_POWER":
-      return manager.process(gameId, playerId, "USE_POWER", msg.payload);
-  }
-}
-
 async function handleGameEvent(
   socket: Socket,
   io: Server,
@@ -237,7 +220,7 @@ async function handleGameEvent(
     send(socket, { kind: "ERROR", message: "Not joined to this game" });
     return;
   }
-  const result = dispatchGameEvent(manager, data.playerId, msg);
+  const result = manager.process(msg.gameId, data.playerId, msg.type, msg.payload);
   if (result.error) {
     send(socket, { kind: "ERROR", message: result.error });
     return;
