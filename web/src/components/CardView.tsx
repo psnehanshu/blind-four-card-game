@@ -1,7 +1,17 @@
+import { useEffect } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import type { HTMLMotionProps } from "motion/react";
 import type { Card, Suit } from "../../../engine/types.js";
 import { cardImageSrc } from "../util/cardAssets.js";
+
+/**
+ * Lock-marker card ids whose drop-in flourish has already played this
+ * session. TurnView and SpectatorView mount distinct CardView trees, so
+ * without this the King/Joker entry animation would re-run every time the
+ * UI swaps views. The `setTimeout(0)` defers the add past React's strict-
+ * mode double-mount in dev so the first true placement still animates.
+ */
+const seenLockMarkers = new Set<string>();
 
 function cardAltText(card: Card): string {
   if (card.rank === "JOKER") return "Joker";
@@ -46,6 +56,15 @@ export function CardView({
   motionProps,
 }: Props) {
   const isOverlay = markerStyle === "overlay" && !!lockMarker;
+  const markerId = lockMarker?.id;
+  const skipMarkerEntry = markerId !== undefined && seenLockMarkers.has(markerId);
+
+  useEffect(() => {
+    if (markerId === undefined) return;
+    const handle = setTimeout(() => seenLockMarkers.add(markerId), 0);
+    return () => clearTimeout(handle);
+  }, [markerId]);
+
   return (
     <motion.div className="card-slot" {...motionProps}>
       {label && <span className="card-label">{label}</span>}
@@ -56,7 +75,7 @@ export function CardView({
             <motion.div
               key={`marker-${lockMarker.id}`}
               className="lock-marker"
-              initial={{ y: -40, rotate: -45, scale: 0.6, opacity: 0 }}
+              initial={skipMarkerEntry ? false : { y: -40, rotate: -45, scale: 0.6, opacity: 0 }}
               animate={{ y: 0, rotate: -8, scale: 1, opacity: 1 }}
               exit={{ y: -40, opacity: 0 }}
               transition={{ type: "spring", stiffness: 280, damping: 16 }}
