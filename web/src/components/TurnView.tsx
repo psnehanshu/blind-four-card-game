@@ -1,14 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import type {
-  BasePowerAction,
-  Card,
-  EventPayloadMap,
-  PeekResult,
-  PowerAction,
-  ProposedEventType,
-  Rank,
-} from "../../../engine/types.js";
+import type { BasePowerAction, Card, PeekResult, PowerAction, Rank } from "../../../engine/types.js";
 import type { RemoteEngine } from "../net/useRemoteEngine.js";
 import { CardView } from "./CardView.js";
 import { PowerView } from "./PowerView.js";
@@ -155,15 +147,11 @@ export function TurnView({ remote }: Props) {
   const me = visible.players.find((p) => p.id === playerId);
   const opponents = visible.players.filter((p) => p.id !== playerId);
 
-  function send<T extends ProposedEventType>(type: T, payload: EventPayloadMap[T]) {
-    dispatch(type, payload);
-  }
-
   function drawFrom(source: "deck" | "discard") {
     const fromEl = source === "deck" ? deckRef.current : discardRef.current;
     const from = rectCenter(fromEl);
     const sourceCardBefore: Card | null = source === "discard" ? (visible.discardPile.at(-1) ?? null) : null;
-    send("DRAW_CARD", { source });
+    dispatch({ type: "DRAW_CARD", payload: { source } });
     if (!from) return;
     setDrawnHiddenForFlight(true);
     // After the engine's STATE push arrives, drawnRef will be mounted.
@@ -199,7 +187,7 @@ export function TurnView({ remote }: Props) {
     const discardRect = rectCenter(discardRef.current);
     const drawnBefore = drawn;
 
-    send("REPLACE_CARD", { handIndex });
+    dispatch({ type: "REPLACE_CARD", payload: { handIndex } });
     if (!drawnRect || !handRect || !discardRect || !drawnBefore) return;
 
     setHideDiscardTopForFlight(true);
@@ -223,7 +211,7 @@ export function TurnView({ remote }: Props) {
     const from = rectCenter(drawnRef.current);
     const to = rectCenter(discardRef.current);
     const drawnBefore = drawn;
-    send("DISCARD_DRAWN", undefined);
+    dispatch({ type: "DISCARD_DRAWN", payload: undefined });
     if (!from || !to || !drawnBefore) return;
     setHideDiscardTopForFlight(true);
     pushFlight({ from, to, card: drawnBefore, revealAt: null, scaleFrom: DRAWN_CLOSEUP_SCALE }, () =>
@@ -338,7 +326,10 @@ export function TurnView({ remote }: Props) {
     // does that when the server confirms the power. Clearing now would let
     // the Dialog re-evaluate with !awaitingOpponentPick=true while inPower is
     // still true (no STATE yet), briefly remounting PowerView's peek form.
-    dispatch("USE_POWER", wrap({ power: "peek", target: "opponent", opponentId, opponentCardIndex: cardIndex }));
+    dispatch({
+      type: "USE_POWER",
+      payload: wrap({ power: "peek", target: "opponent", opponentId, opponentCardIndex: cardIndex }),
+    });
   }
 
   function pickLockTarget(targetPlayerId: string, cardIndex: number) {
@@ -349,7 +340,7 @@ export function TurnView({ remote }: Props) {
     // Same rationale as pickOpponentPeek: leave lockPickWrap set so the
     // Dialog doesn't briefly reopen with the (stale) Joker rank picker or K
     // resolve header while we wait for the server STATE response.
-    dispatch("USE_POWER", wrap({ power: "lock", targetPlayerId, cardIndex }));
+    dispatch({ type: "USE_POWER", payload: wrap({ power: "lock", targetPlayerId, cardIndex }) });
   }
 
   // Direct K on discard: skip the PowerView dialog entirely and go straight
@@ -432,7 +423,7 @@ export function TurnView({ remote }: Props) {
 
   function callShowdown() {
     clearAutoEnd();
-    send("CALL_SHOWDOWN", undefined);
+    dispatch({ type: "CALL_SHOWDOWN", payload: undefined });
     playShowdown();
   }
 
@@ -475,7 +466,7 @@ export function TurnView({ remote }: Props) {
 
     endTimeoutRef.current = setTimeout(() => {
       clearAutoEnd();
-      dispatchRef.current("END_TURN", undefined);
+      dispatchRef.current({ type: "END_TURN", payload: undefined });
     }, windowMs);
 
     return clearAutoEnd;

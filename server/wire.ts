@@ -5,24 +5,11 @@ export interface LobbyPlayer {
   displayName: string;
 }
 
-/** Client → Server messages, sent as a single typed "msg" socket.io event. */
-export type ClientMsg =
-  | { kind: "CREATE_GAME"; displayName: string; seed?: number }
-  | { kind: "JOIN_GAME"; gameId: string; displayName: string; sessionToken?: string }
-  | { kind: "START_GAME"; gameId: string }
-  | {
-      kind: "GAME_EVENT";
-      gameId: string;
-      type: ProposedEventType;
-      /** Engine deep-validates the payload after we narrow it on the server. */
-      payload: unknown;
-    }
-  /**
-   * Pull the latest snapshot for this player on demand. Used by clients that
-   * suspect they've drifted (tab returned from background, network blip, etc.)
-   * Reply is a single STATE/LOBBY sent only to the requesting socket.
-   */
-  | { kind: "REQUEST_STATE"; gameId: string };
+/**
+ * Client → Server messages, sent as a single typed "msg" socket.io event.
+ * Derived from the zod schema so clients can't drift from the parser.
+ */
+export type { ClientMsg } from "./wire-schema.js";
 
 /** Server → Client messages, broadcast as a single typed "msg" socket.io event. */
 export type ServerMsg =

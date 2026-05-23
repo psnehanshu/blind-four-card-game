@@ -44,7 +44,7 @@ export function PowerView({ remote, onChooseOpponentPeek, onChooseLock }: Props)
   });
 
   function submit(action: BasePowerAction, wrap: (a: BasePowerAction) => PowerAction) {
-    dispatch("USE_POWER", wrap(action));
+    dispatch({ type: "USE_POWER", payload: wrap(action) });
     // Peek result is delivered via the next STATE push (peekResult field).
     // TurnView observes that and shows the peek dialog.
   }

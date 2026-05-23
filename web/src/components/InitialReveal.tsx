@@ -15,7 +15,7 @@ export function InitialReveal({ remote }: Props) {
   const name = displayNames[identity.playerId] ?? identity.playerId;
 
   function ack() {
-    dispatch("ACKNOWLEDGE_REVEAL", undefined);
+    dispatch({ type: "ACKNOWLEDGE_REVEAL", payload: undefined });
   }
 
   return (

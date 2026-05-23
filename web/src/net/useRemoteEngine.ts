@@ -1,12 +1,5 @@
 import { useEffect, useReducer, useRef, useState } from "react";
-import type {
-  Card,
-  EventPayloadMap,
-  PeekResult,
-  ProposedEventType,
-  Rank,
-  VisibleGameState,
-} from "../../../engine/types.js";
+import type { Card, EventData, PeekResult, ProposedEventType, Rank, VisibleGameState } from "../../../engine/types.js";
 import type { ServerMsg } from "../../../server/wire.js";
 import { getCardValue } from "../../../engine/cards.js";
 import { isConnected, send, subscribe, subscribeConnect } from "./socket.js";
@@ -48,7 +41,7 @@ export interface RemoteEngine {
   cue: AnimationCue;
   version: number;
   lastError: string | null;
-  dispatch: <T extends ProposedEventType>(type: T, payload: EventPayloadMap[T]) => void;
+  dispatch: (event: EventData) => void;
   clearPeek: () => void;
   clearError: () => void;
 }
@@ -242,11 +235,11 @@ export function useRemoteEngine(initial: InitialAction): RemoteEngine {
     return () => clearTimeout(t);
   }, [cue]);
 
-  const dispatch = <T extends ProposedEventType>(type: T, payload: EventPayloadMap[T]): void => {
+  const dispatch = (event: EventData): void => {
     const id = identityRef.current;
     if (!id) return;
     setLastError(null);
-    send({ kind: "GAME_EVENT", gameId: id.gameId, type, payload });
+    send({ kind: "GAME_EVENT", gameId: id.gameId, ...event });
   };
 
   return {
