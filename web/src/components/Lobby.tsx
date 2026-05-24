@@ -3,7 +3,12 @@ import { AnimatePresence, motion } from "motion/react";
 import { MAX_PLAYERS, MIN_PLAYERS } from "../../../engine/types.js";
 import { send } from "../net/socket.js";
 import type { RemoteEngine } from "../net/useRemoteEngine.js";
-import { playPlayerJoin } from "../audio/sound.js";
+import { playButton, playPlayerJoin, startAudio } from "../audio/sound.js";
+import { Dialog } from "./Dialog.js";
+
+function clickSound(): void {
+  void startAudio().then(playButton);
+}
 
 interface Props {
   remote: RemoteEngine;
@@ -28,6 +33,7 @@ export function Lobby({ remote }: Props) {
   const { identity, lobby } = remote;
   const [shareState, setShareState] = useState<ShareState>("idle");
   const [copyState, setCopyState] = useState<CopyState>("idle");
+  const [aboutKishoreOpen, setAboutKishoreOpen] = useState(false);
 
   if (!identity) return null;
 
@@ -229,13 +235,58 @@ export function Lobby({ remote }: Props) {
           <button type="button" className="primary big" disabled={!canStart} onClick={start}>
             {canStart ? "Start game" : `Waiting for ${MIN_PLAYERS - players.length} more player(s)`}
           </button>
-          <button type="button" className="ghost" disabled={!canAddBot} onClick={addBot}>
-            + Invite Kishore (bot)
-          </button>
+          <div className="invite-kishore-wrap">
+            <button type="button" className="ghost" disabled={!canAddBot} onClick={addBot}>
+              + Invite Kishore (bot)
+            </button>
+            <button
+              type="button"
+              className="ghost about-kishore-btn"
+              aria-label="About Kishore"
+              onClick={() => {
+                clickSound();
+                setAboutKishoreOpen(true);
+              }}
+            >
+              ?
+            </button>
+          </div>
         </>
       ) : (
         <p className="muted">Waiting for the host to start the game…</p>
       )}
+
+      <Dialog open={aboutKishoreOpen} dismissable>
+        <div className="about-kishore-dialog">
+          <h2>Meet Kishore</h2>
+          <div className="about-kishore-body">
+            <p className="about-kishore-tagline">A server-side bot for when you&apos;re short on friends.</p>
+            <p>Kishore plays by a few simple rules:</p>
+            <ul>
+              <li>Grabs low cards off the discard pile when they&apos;d improve his hand.</li>
+              <li>Otherwise draws blind from the deck.</li>
+              <li>Uses the King to lock his own low cards so you can&apos;t swap them away.</li>
+              <li>Calls showdown when his hand looks lean.</li>
+            </ul>
+            <p className="about-kishore-note">
+              He&apos;s not very smart, and he misplays on purpose about 30% of the time — don&apos;t take it personally if
+              you lose. Add more than one and they&apos;re auto-numbered: Kishore, Kishore 2, Kishore 3, …
+            </p>
+          </div>
+          <div className="about-kishore-actions">
+            <button
+              type="button"
+              className="primary"
+              onClick={() => {
+                clickSound();
+                setAboutKishoreOpen(false);
+              }}
+            >
+              Got it
+            </button>
+          </div>
+        </div>
+      </Dialog>
     </div>
   );
 }

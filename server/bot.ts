@@ -3,13 +3,18 @@
  * driven by socket.ts after every state change. Plays by a handful of
  * hardcoded rules and makes mistakes a fixed percentage of the time:
  *
- *  - DRAW: always from the deck.
+ *  - DRAW: from the discard pile when the top card is "very low" (value ≤ 4
+ *    by default) AND strictly lower than the bot's highest unlocked card —
+ *    a guaranteed improvement worth the commit-to-place cost. Otherwise
+ *    from the deck.
  *  - DECISION: if the drawn card is strictly lower than the highest unlocked
  *    card in hand, replace that highest slot; otherwise discard. The 30%
  *    mistake rate kicks in here — when replacing, the bot picks a random
  *    unlocked slot instead of the highest.
- *  - POWER: uses the discard-top's power on random valid targets. Joker
- *    mimics a random rank.
+ *  - POWER: uses the discard-top's power on random valid targets, with one
+ *    exception — Lock (K) prefers the bot's own unlocked cards of value ≤ 3
+ *    when any exist, falling back to a random unlocked card. Joker mimics
+ *    a random rank.
  *  - SHOWDOWN: when eligible and the bot's hand value is < 10, call it.
  *    Otherwise end turn.
  *
@@ -29,6 +34,10 @@ export interface BotOptions {
   mistakeRate?: number;
   /** Hand-value threshold strictly below which the bot calls showdown. Default 10. */
   showdownThreshold?: number;
+  /** Max discard-top value at or below which the bot considers drawing from
+   *  the discard pile instead of the deck. Still requires the top to be
+   *  strictly lower than the bot's highest unlocked hand card. Default 4. */
+  discardDrawThreshold?: number;
 }
 
 type MimicRank = "10" | "J" | "Q" | "K";
@@ -60,6 +69,7 @@ export function pickBotAction(engine: GameEngine, botId: string, options: BotOpt
   const rng = options.rng ?? Math.random;
   const mistakeRate = options.mistakeRate ?? 0.3;
   const showdownThreshold = options.showdownThreshold ?? 10;
+  const discardDrawThreshold = options.discardDrawThreshold ?? 4;
 
   const validEvents = engine.getValidEvents(botId);
   if (validEvents.length === 0) return null;
@@ -68,13 +78,14 @@ export function pickBotAction(engine: GameEngine, botId: string, options: BotOpt
     return { type: "ACKNOWLEDGE_REVEAL", payload: undefined };
   }
   if (validEvents.includes("DRAW_CARD")) {
-    return { type: "DRAW_CARD", payload: { source: "deck" } };
+    const source = shouldDrawFromDiscard(engine, botId, discardDrawThreshold) ? "discard" : "deck";
+    return { type: "DRAW_CARD", payload: { source } };
   }
 
   const canReplace = validEvents.includes("REPLACE_CARD");
   const canDiscard = validEvents.includes("DISCARD_DRAWN");
   if (canReplace || canDiscard) {
-    return pickDecisionAction(engine, botId, rng, mistakeRate, canReplace, canDiscard);
+    return pickDecisionAction(engine, botId, rng, mistakeRate, canDiscard);
   }
 
   if (validEvents.includes("USE_POWER")) {
@@ -95,7 +106,6 @@ function pickDecisionAction(
   botId: string,
   rng: () => number,
   mistakeRate: number,
-  canReplace: boolean,
   canDiscard: boolean,
 ): EventData {
   const drawn = engine.getDrawnCard(botId);
@@ -133,6 +143,28 @@ function pickReplaceIndex(unlocked: { i: number }[], optimalIdx: number, rng: ()
   return optimalIdx;
 }
 
+/**
+ * True when the discard top is "very low" (value ≤ threshold) AND strictly
+ * lower than the bot's highest unlocked card AND the bot has an unlocked
+ * slot to place it into. Drawing from discard forces a replace (the engine
+ * forbids discarding back), so we only do it when it's a guaranteed
+ * improvement.
+ */
+function shouldDrawFromDiscard(engine: GameEngine, botId: string, threshold: number): boolean {
+  const game = engine.getState();
+  const top = game.discardPile[game.discardPile.length - 1];
+  if (!top) return false;
+  if (top.value > threshold) return false;
+
+  const player = game.players.find((p) => p.id === botId);
+  if (!player) return false;
+  const unlocked = player.hand.filter((pc) => !pc.locked);
+  if (unlocked.length === 0) return false;
+
+  const highest = unlocked.reduce((a, b) => (b.card.value > a.card.value ? b : a));
+  return top.value < highest.card.value;
+}
+
 function shouldCallShowdown(engine: GameEngine, botId: string, threshold: number): boolean {
   const game = engine.getState();
   const player = game.players.find((p) => p.id === botId);
@@ -161,14 +193,14 @@ function buildJokerAction(engine: GameEngine, botId: string, mimic: MimicRank, r
   if (mimic === "10") return { power: "joker", mimicRank: "10", action: buildPeek(engine, botId, rng) };
   if (mimic === "J") return { power: "joker", mimicRank: "J", action: buildShuffle(engine, botId, rng) };
   if (mimic === "Q") return { power: "joker", mimicRank: "Q", action: buildSwap(engine, botId, rng) };
-  return { power: "joker", mimicRank: "K", action: buildLock(engine, rng) };
+  return { power: "joker", mimicRank: "K", action: buildLock(engine, botId, rng) };
 }
 
 function buildBaseAction(engine: GameEngine, botId: string, rank: MimicRank, rng: () => number): BasePowerAction {
   if (rank === "10") return buildPeek(engine, botId, rng);
   if (rank === "J") return buildShuffle(engine, botId, rng);
   if (rank === "Q") return buildSwap(engine, botId, rng);
-  return buildLock(engine, rng);
+  return buildLock(engine, botId, rng);
 }
 
 function buildPeek(engine: GameEngine, botId: string, rng: () => number): BasePowerAction & { power: "peek" } {
@@ -240,8 +272,31 @@ function buildSwap(engine: GameEngine, botId: string, rng: () => number): BasePo
   throw new Error("No valid swap targets");
 }
 
-function buildLock(engine: GameEngine, rng: () => number): BasePowerAction & { power: "lock" } {
+/** Threshold (inclusive) under which the bot prefers locking its own cards
+ *  rather than picking randomly. Locking a low own card protects it from
+ *  being swapped away or replaced. */
+const LOCK_OWN_LOW_THRESHOLD = 3;
+
+function buildLock(engine: GameEngine, botId: string, rng: () => number): BasePowerAction & { power: "lock" } {
   const game = engine.getState();
+
+  // Prefer locking own cards with value <= 3 — protects them from swaps
+  // and replacement. Locking an opponent's low card would just help them.
+  const botPlayer = game.players.find((p) => p.id === botId);
+  if (botPlayer) {
+    const ownLowSlots: number[] = [];
+    for (let i = 0; i < botPlayer.hand.length; i++) {
+      const pc = botPlayer.hand[i];
+      if (pc && !pc.locked && pc.card.value <= LOCK_OWN_LOW_THRESHOLD) {
+        ownLowSlots.push(i);
+      }
+    }
+    if (ownLowSlots.length > 0) {
+      return { power: "lock", targetPlayerId: botId, cardIndex: randomElement(ownLowSlots, rng) };
+    }
+  }
+
+  // Fallback: no low own cards — lock any unlocked card at random.
   const candidates: { playerId: string; cardIndex: number }[] = [];
   for (const p of game.players) {
     for (let i = 0; i < p.hand.length; i++) {

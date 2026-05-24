@@ -1619,6 +1619,90 @@ button.how-to-play-btn {
   font-weight: 700;
 }
 
+/* Wrapper keeps the Invite button centered like the Start button above it
+   (the lobby column is align-items: center). The "?" floats absolutely off
+   the right edge so it doesn't shift the Invite button off-center. */
+.invite-kishore-wrap {
+  position: relative;
+  display: inline-block;
+}
+
+button.about-kishore-btn {
+  position: absolute;
+  left: 100%;
+  /* Center vertically without using transform so the global button:active
+     press-down (transform: translateY(1px)) still applies cleanly. */
+  top: calc(50% - 20px);
+  margin-left: 8px;
+  /* Square — width == height so border-radius:50% gives a true circle.
+     Matches the Invite button's intrinsic height (~40px). */
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  font-size: 15px;
+  font-weight: 700;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Short intro popup — cap the outer dialog narrower than the default 720px
+   so the content doesn't get marooned in empty space on desktop. */
+.app-dialog:has(.about-kishore-dialog) {
+  max-width: min(460px, 92vw);
+}
+
+.about-kishore-dialog {
+  padding: 24px 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  text-align: left;
+}
+
+.about-kishore-dialog > h2 {
+  text-align: center;
+}
+
+.about-kishore-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  color: var(--fg);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.about-kishore-body p,
+.about-kishore-body ul {
+  margin: 0;
+}
+
+.about-kishore-body ul {
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.about-kishore-tagline {
+  color: var(--muted);
+  font-style: italic;
+  font-family: var(--font-script);
+  font-size: 15px;
+}
+
+.about-kishore-note {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.about-kishore-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
 .lobby-players {
   width: 100%;
   display: flex;

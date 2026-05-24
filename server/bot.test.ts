@@ -66,6 +66,37 @@ describe("bot — initial reveal + draw", () => {
     // alice is seat 1; not her turn since currentTurn=0
     assert.equal(pickBotAction(engine, "alice"), null);
   });
+
+  it("draws from the discard pile when the top is very low and improves the hand", () => {
+    const engine = botFirst();
+    setHand(engine, "bot", [8, 9, 10, 11]); // highest=11
+    engine.getState().discardPile.push(card("steal", "2", 2));
+    assert.deepEqual(pickBotAction(engine, "bot"), { type: "DRAW_CARD", payload: { source: "discard" } });
+  });
+
+  it("draws from the deck when the discard top is low but doesn't improve the hand", () => {
+    const engine = botFirst();
+    setHand(engine, "bot", [1, 1, 1, 1]); // highest=1, can't be beaten by a 2
+    engine.getState().discardPile.push(card("notlow", "2", 2));
+    assert.deepEqual(pickBotAction(engine, "bot"), { type: "DRAW_CARD", payload: { source: "deck" } });
+  });
+
+  it("draws from the deck when the discard top is above the threshold", () => {
+    const engine = botFirst();
+    setHand(engine, "bot", [8, 9, 10, 11]); // would improve, but 5 > default threshold of 4
+    engine.getState().discardPile.push(card("mid", "5", 5));
+    assert.deepEqual(pickBotAction(engine, "bot"), { type: "DRAW_CARD", payload: { source: "deck" } });
+  });
+
+  it("respects a custom discardDrawThreshold", () => {
+    const engine = botFirst();
+    setHand(engine, "bot", [8, 9, 10, 11]);
+    engine.getState().discardPile.push(card("mid", "5", 5));
+    assert.deepEqual(pickBotAction(engine, "bot", { discardDrawThreshold: 5 }), {
+      type: "DRAW_CARD",
+      payload: { source: "discard" },
+    });
+  });
 });
 
 describe("bot — replace vs discard", () => {
@@ -192,6 +223,49 @@ describe("bot — power actions", () => {
     if (action?.type !== "USE_POWER") throw new Error("expected USE_POWER");
     const result = engine.processEvent("bot", "USE_POWER", action.payload);
     assert.equal(result.error, undefined);
+  });
+
+  it("Lock (K) prefers the bot's own low cards (value ≤ 3)", () => {
+    // triggerPower sets bot's hand to [1, 1, 1, 1] — all low. Bot must
+    // target itself, not alice.
+    const engine = triggerPower("K", 13);
+    const action = pickBotAction(engine, "bot");
+    if (action?.type !== "USE_POWER" || action.payload.power !== "lock") {
+      throw new Error("expected lock action");
+    }
+    assert.equal(action.payload.targetPlayerId, "bot");
+  });
+
+  it("Lock (K) skips own cards above the threshold", () => {
+    const engine = triggerPower("K", 13);
+    setHand(engine, "bot", [10, 11, 12, 4]); // none ≤ 3
+    setHand(engine, "alice", [1, 1, 1, 1]);
+    // No own low cards → falls back to random. Drive rng so the picked
+    // candidate is deterministic; we only assert the action validates.
+    const action = pickBotAction(engine, "bot", { rng: fakeRng([0]) });
+    if (action?.type !== "USE_POWER" || action.payload.power !== "lock") {
+      throw new Error("expected lock action");
+    }
+    const result = engine.processEvent("bot", "USE_POWER", action.payload);
+    assert.equal(result.error, undefined);
+  });
+
+  it("Lock (K) skips already-locked own low cards", () => {
+    const engine = triggerPower("K", 13);
+    // Set hand: index 0 is low but already locked; index 2 is the only
+    // unlocked low slot.
+    setHand(engine, "bot", [1, 10, 2, 11]);
+    const botPlayer = engine.getState().players.find((p) => p.id === "bot");
+    if (!botPlayer) throw new Error("no bot");
+    const slot0 = botPlayer.hand[0];
+    if (!slot0) throw new Error("no slot 0");
+    slot0.locked = true;
+    const action = pickBotAction(engine, "bot");
+    if (action?.type !== "USE_POWER" || action.payload.power !== "lock") {
+      throw new Error("expected lock action");
+    }
+    assert.equal(action.payload.targetPlayerId, "bot");
+    assert.equal(action.payload.cardIndex, 2);
   });
 
   it("uses Joker — engine accepts the produced (mimicked) action for every mimicRank", () => {
