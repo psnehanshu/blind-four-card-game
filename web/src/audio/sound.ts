@@ -2,14 +2,20 @@ import * as Tone from "tone";
 import type { AnimationCue } from "../game/cue.js";
 
 /**
- * Synthesized sound effects + ambient background music using Tone.js.
+ * Synthesized sound effects (via Tone.js) plus a pre-rendered ambient pad
+ * looped through a plain HTMLAudioElement.
  *
  * The browser requires a user gesture before AudioContext can start, so all
  * synth construction is deferred until `startAudio()` runs (it awaits
  * `Tone.start()` first). Calls to play* functions before audio has been started
  * are no-ops, not errors.
  *
- * No samples — every sound is synthesized from oscillators / noise / envelopes.
+ * The pad used to be a Tone.PolySynth driven by a `Tone.Loop`, but the
+ * AMSynth + 8-second reverb chain was pegging mobile CPUs. It's now bounced
+ * to `public/bgm.m4a` (AAC — preferred over MP3 because the container
+ * carries encoder-delay metadata, so <audio loop> repeats without an
+ * audible click at the seam). Rendered offline from the same params via
+ * `_render-bgm.html` (deleted — restore from git if you ever need to tweak).
  */
 
 interface Voices {
@@ -23,9 +29,6 @@ interface Voices {
   bell: Tone.MetalSynth;
   tone: Tone.Synth;
   chord: Tone.PolySynth;
-  pad: Tone.PolySynth;
-  padReverb: Tone.Reverb;
-  padGain: Tone.Gain;
   yourTurn: Tone.Player;
   chooseLock: Tone.Player;
   sad: Tone.MonoSynth;
@@ -33,7 +36,7 @@ interface Voices {
 
 let voices: Voices | null = null;
 let started = false;
-let bgmLoop: Tone.Loop | null = null;
+let bgmAudio: HTMLAudioElement | null = null;
 
 /**
  * Per-voice last scheduled time. Tone's Source-based synths (NoiseSynth,
@@ -130,18 +133,6 @@ export async function startAudio(): Promise<void> {
     volume: -20,
   }).connect(reverb);
 
-  // ── ambient pad (background music) — its own deeper reverb
-  const padGain = new Tone.Gain(1.0).connect(master);
-  const padReverb = new Tone.Reverb({ decay: 8, wet: 0.7 }).connect(padGain);
-  const pad = new Tone.PolySynth(Tone.AMSynth, {
-    harmonicity: 1.5,
-    oscillator: { type: "sine" },
-    envelope: { attack: 1.2, decay: 0.6, sustain: 0.6, release: 4 },
-    modulation: { type: "triangle" },
-    modulationEnvelope: { attack: 1.6, decay: 0.4, sustain: 0.7, release: 3 },
-    volume: -22,
-  }).connect(padReverb);
-
   // ── sampled "your turn" cue (bypasses reverb so the spoken cue stays crisp)
   const yourTurn = new Tone.Player({ url: "/your-turn.mp3", volume: -4 }).connect(master);
 
@@ -184,9 +175,6 @@ export async function startAudio(): Promise<void> {
     bell,
     tone,
     chord,
-    pad,
-    padReverb,
-    padGain,
     yourTurn,
     chooseLock,
     sad,
@@ -327,35 +315,25 @@ export function playChooseLock(): number {
 
 // ──────────────────── Background music ────────────────────
 
-/** Slow ambient pad loop — a 4-chord progression in A minor, very faint. */
+/** Pre-rendered 16-second ambient pad loop. Bounced from the original
+ *  AMSynth + reverb chain so mobile CPUs don't have to synthesize it live.
+ *  Must be called from a user gesture so .play() isn't blocked by the
+ *  browser's autoplay policy. */
 export function startBackgroundMusic(): void {
-  if (!voices || bgmLoop) return;
-  const pad = voices.pad;
-  const progression: string[][] = [
-    ["A2", "C3", "E3", "G3"],
-    ["F2", "A2", "C3", "E3"],
-    ["D2", "F2", "A2", "C3"],
-    ["E2", "G2", "B2", "D3"],
-  ];
-  let step = 0;
-  bgmLoop = new Tone.Loop((time) => {
-    const idx = step % progression.length;
-    const chordNotes = progression[idx];
-    if (chordNotes) pad.triggerAttackRelease(chordNotes, "1m", time);
-    step += 1;
-  }, "1m").start(0);
-
-  if (Tone.getTransport().state !== "started") {
-    Tone.getTransport().bpm.value = 60;
-    Tone.getTransport().start();
+  if (!bgmAudio) {
+    bgmAudio = new Audio("/bgm.m4a");
+    bgmAudio.loop = true;
+    bgmAudio.preload = "auto";
   }
+  void bgmAudio.play().catch(() => {
+    /* autoplay blocked — caller is responsible for the gesture context */
+  });
 }
 
 export function stopBackgroundMusic(): void {
-  if (bgmLoop) {
-    bgmLoop.stop();
-    bgmLoop.dispose();
-    bgmLoop = null;
+  if (bgmAudio) {
+    bgmAudio.pause();
+    bgmAudio.currentTime = 0;
   }
 }
 
