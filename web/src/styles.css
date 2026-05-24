@@ -2051,14 +2051,15 @@ button.about-kishore-btn {
   justify-content: center;
 }
 
-/* Floating toast shown to a player whose hand was just shuffled. Sits above
-   the game-code-badge at the bottom of the viewport. */
+/* Floating toast for transient game events (shuffle, peek). Pinned to the
+   top of the viewport so it sits above the play area and doesn't collide
+   with the game-code-badge or thumb area at the bottom. */
 .shuffle-notice {
   /* Centering translateX(-50%) is set via motion's `x: "-50%"` prop so it
      stays applied through the y/opacity animation — Motion writes one inline
      transform string that would otherwise wipe out a CSS translateX. */
   position: fixed;
-  bottom: calc(48px + env(safe-area-inset-bottom));
+  top: calc(16px + env(safe-area-inset-top));
   left: 50%;
   z-index: 110;
   background: linear-gradient(180deg, #2c1d10 0%, #14090a 100%);
