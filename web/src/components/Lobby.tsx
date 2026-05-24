@@ -56,6 +56,14 @@ export function Lobby({ remote }: Props) {
   const gameId = identity.gameId;
 
   function start() {
+    // Sharing the invite via the share sheet drops the page out of fullscreen
+    // (and Safari/iOS gives no API to re-enter from a non-gesture). Piggyback
+    // on the host's Start click — which IS a gesture — to restore it.
+    if (typeof document !== "undefined" && !document.fullscreenElement) {
+      document.documentElement.requestFullscreen?.().catch(() => {
+        /* not supported / user denied — game still runs windowed */
+      });
+    }
     send({ kind: "START_GAME", gameId });
   }
 
@@ -222,7 +230,7 @@ export function Lobby({ remote }: Props) {
             {canStart ? "Start game" : `Waiting for ${MIN_PLAYERS - players.length} more player(s)`}
           </button>
           <button type="button" className="ghost" disabled={!canAddBot} onClick={addBot}>
-            + Add Kishore (bot)
+            + Invite Kishore (bot)
           </button>
         </>
       ) : (
