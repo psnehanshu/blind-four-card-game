@@ -16,6 +16,15 @@ export type AnimationCue =
       b: { playerId: string; cardIndex: number };
     }
   | { kind: "lock"; nonce: number; targetPlayerId: string; cardIndex: number }
+  | { kind: "peek"; nonce: number; actorId: string; target: "own" }
+  | {
+      kind: "peek";
+      nonce: number;
+      actorId: string;
+      target: "opponent";
+      opponentId: string;
+      opponentCardIndex: number;
+    }
   | { kind: "draw"; nonce: number; source: "deck" | "discard"; actorId: string }
   | { kind: "discard"; nonce: number; actorId: string }
   | { kind: "replace"; nonce: number; actorId: string; handIndex: number }
@@ -78,6 +87,21 @@ function derivePowerCue(p: Record<string, unknown>, nonce: number, actorId: stri
   }
   if (core.power === "lock" && typeof core.targetPlayerId === "string" && typeof core.cardIndex === "number") {
     return { kind: "lock", nonce, targetPlayerId: core.targetPlayerId, cardIndex: core.cardIndex };
+  }
+  if (core.power === "peek") {
+    if (core.target === "own") {
+      return { kind: "peek", nonce, actorId, target: "own" };
+    }
+    if (core.target === "opponent" && typeof core.opponentId === "string" && typeof core.opponentCardIndex === "number") {
+      return {
+        kind: "peek",
+        nonce,
+        actorId,
+        target: "opponent",
+        opponentId: core.opponentId,
+        opponentCardIndex: core.opponentCardIndex,
+      };
+    }
   }
   return null;
 }

@@ -49,6 +49,7 @@ export function GameShell({ remote }: Props) {
       {myTurn ? <TurnView remote={remote} /> : <SpectatorView remote={remote} />}
       <div className={`my-turn-outline${myTurn ? " is-active" : ""}`} aria-hidden="true" />
       <ShuffleNotice remote={remote} />
+      <PeekNotice remote={remote} />
     </>
   );
 }
@@ -117,6 +118,97 @@ function WaitingForAcknowledge({ remote }: { remote: RemoteEngine }) {
 }
 
 const SHUFFLE_NOTICE_MS = 3500;
+const PEEK_NOTICE_MS = 3500;
+const ORDINAL = ["1st", "2nd", "3rd", "4th"] as const;
+
+function ordinalFor(cardIndex: number): string {
+  return ORDINAL[cardIndex] ?? `${cardIndex + 1}th`;
+}
+
+/**
+ * Toast shown to every player when someone peeks a card, naming the actor
+ * and the target slot. Sits in the same bottom-center spot as ShuffleNotice
+ * — the two won't collide because peek and shuffle are mutually exclusive
+ * power resolutions.
+ */
+function PeekNotice({ remote }: { remote: RemoteEngine }) {
+  const { cue, identity, visibleState, displayNames } = remote;
+  const myId = identity?.playerId;
+  const [message, setMessage] = useState<string | null>(null);
+  const lastNonceRef = useRef<number | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!cue || cue.kind !== "peek") return;
+    if (cue.nonce === lastNonceRef.current) return;
+    if (!myId) return;
+    lastNonceRef.current = cue.nonce;
+
+    if (timerRef.current) clearTimeout(timerRef.current);
+
+    const actorIsMe = cue.actorId === myId;
+    const actorName = playerNameFor(
+      cue.actorId,
+      myId,
+      displayNames,
+      visibleState?.players.find((p) => p.id === cue.actorId)?.name,
+    );
+
+    let text: string;
+    if (cue.target === "own") {
+      text = actorIsMe ? "You peeked at your own hand" : `${actorName} peeked at their own hand`;
+    } else {
+      const ord = ordinalFor(cue.opponentCardIndex);
+      const targetIsMe = cue.opponentId === myId;
+      if (actorIsMe) {
+        const targetName = playerNameFor(
+          cue.opponentId,
+          myId,
+          displayNames,
+          visibleState?.players.find((p) => p.id === cue.opponentId)?.name,
+        );
+        text = `You peeked at ${targetName}'s ${ord} card`;
+      } else if (targetIsMe) {
+        text = `${actorName} peeked at your ${ord} card`;
+      } else {
+        const targetName = playerNameFor(
+          cue.opponentId,
+          myId,
+          displayNames,
+          visibleState?.players.find((p) => p.id === cue.opponentId)?.name,
+        );
+        text = `${actorName} peeked at ${targetName}'s ${ord} card`;
+      }
+    }
+    setMessage(text);
+    timerRef.current = setTimeout(() => {
+      setMessage(null);
+      timerRef.current = null;
+    }, PEEK_NOTICE_MS);
+  }, [cue, myId, displayNames, visibleState]);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, []);
+
+  return (
+    <AnimatePresence>
+      {message && (
+        <motion.div
+          className="shuffle-notice"
+          initial={{ x: "-50%", y: 20, opacity: 0 }}
+          animate={{ x: "-50%", y: 0, opacity: 1 }}
+          exit={{ x: "-50%", y: 20, opacity: 0 }}
+          transition={{ type: "spring", stiffness: 260, damping: 22 }}
+        >
+          {message}
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
 
 function ShuffleNotice({ remote }: { remote: RemoteEngine }) {
   const { cue, identity, visibleState, displayNames } = remote;
