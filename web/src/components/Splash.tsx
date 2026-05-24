@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { startAudio, startBackgroundMusic } from "../audio/sound.js";
 import { ALL_CARD_IMAGE_URLS, preloadCardImages } from "../util/cardAssets.js";
+import { HowToPlay } from "./HowToPlay.js";
 
 interface Props {
   onReady: () => void;
@@ -72,6 +73,7 @@ export function Splash({ onReady }: Props) {
 
   return (
     <div className="screen splash">
+      <HowToPlay />
       <h1 className="splash-title">
         <img src="/logo.png" alt="Blind Four" className="splash-logo" />
       </h1>

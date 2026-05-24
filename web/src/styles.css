@@ -1453,6 +1453,138 @@ button.game-code-copy[data-state="copied"] {
   font-weight: 700;
 }
 
+/* ───────── how to play ───────── */
+
+button.how-to-play-btn {
+  position: fixed;
+  top: calc(12px + env(safe-area-inset-top));
+  right: calc(12px + env(safe-area-inset-right));
+  z-index: 60;
+  padding: 8px 14px 8px 10px;
+  border-radius: 999px;
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 1.6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.how-to-play-btn__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid var(--brass-mid);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--brass-light);
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.how-to-play-btn__label {
+  text-transform: uppercase;
+}
+
+.how-to-play-dialog {
+  padding: 24px 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  text-align: left;
+}
+
+.how-to-play-dialog > h2 {
+  text-align: center;
+}
+
+.how-to-play-body {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  color: var(--fg);
+  font-size: 14px;
+  line-height: 1.55;
+  overflow-y: auto;
+  max-height: 70dvh;
+  padding-right: 4px;
+}
+
+.how-to-play-body p,
+.how-to-play-body ul,
+.how-to-play-body ol {
+  margin: 0;
+}
+
+.how-to-play-body ul,
+.how-to-play-body ol {
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.how-to-play-body section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.how-to-play-body section h3 {
+  margin: 0;
+  color: var(--brass-light);
+  font-size: 12px;
+  letter-spacing: 2px;
+}
+
+.how-to-play-tagline {
+  color: var(--muted);
+  font-style: italic;
+  font-family: var(--font-script);
+  font-size: 15px;
+}
+
+.how-to-play-note {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.how-to-play-values {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 6px 14px;
+}
+
+.how-to-play-values li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.how-to-play-values li span {
+  display: inline-block;
+  min-width: 48px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  color: var(--brass-light);
+  letter-spacing: 1px;
+}
+
+.how-to-play-powers strong {
+  color: var(--brass-light);
+}
+
+.how-to-play-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
 /* ───────── lobby ───────── */
 
 .screen.lobby {

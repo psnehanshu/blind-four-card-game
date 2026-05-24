@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Lobby } from "./components/Lobby.js";
 import { GameShell } from "./components/GameShell.js";
 import { Splash } from "./components/Splash.js";
+import { HowToPlay } from "./components/HowToPlay.js";
 import { useRemoteEngine } from "./net/useRemoteEngine.js";
 
 /** Parses `#/game/<id>` out of the hash. Returns null if not present. */
@@ -84,6 +85,7 @@ function NamePrompt({ joinTarget, onSubmit }: { joinTarget: string | null; onSub
         if (trimmed.length > 0) onSubmit(trimmed);
       }}
     >
+      <HowToPlay />
       <h1>Blind Four</h1>
       <p className="muted">{joinTarget ? `Joining game ${joinTarget}` : "Create a new game"}</p>
       <section className="form-block">
